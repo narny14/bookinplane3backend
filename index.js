@@ -152,6 +152,41 @@ app.get('/api/search-vols', (req, res) => {
   });
 });
 
+app.post('/api/search-vols-dispo', (req, res) => {
+  const {
+    depart,      // ID aéroport départ
+    arrivee,     // ID aéroport arrivée
+    departureDate,
+    adults,
+    children,
+  } = req.body;
+
+  const totalPassagers = (adults || 0) + (children || 0);
+
+  const query = `
+    SELECT v.*, 
+           a1.nom AS depart_nom, 
+           a2.nom AS arrivee_nom,
+           t.prix, t.devise, t.places_disponibles, c.nom AS classe
+    FROM vols v
+    JOIN aeroports a1 ON v.depart_id = a1.id
+    JOIN aeroports a2 ON v.arrivee_id = a2.id
+    JOIN tarifs_vol t ON v.id = t.vol_id
+    JOIN classes_voyage c ON t.classe_id = c.id
+    WHERE v.depart_id = ?
+      AND v.arrivee_id = ?
+      AND DATE(v.date_depart) = ?
+      AND v.disponible = 1
+      AND t.places_disponibles >= ?
+  `;
+
+  db.query(query, [depart, arrivee, departureDate, totalPassagers], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
+  });
+});
+
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);

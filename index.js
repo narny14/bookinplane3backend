@@ -154,8 +154,8 @@ app.get('/api/search-vols', (req, res) => {
 
 app.post('/api/search-vols-dispo', (req, res) => {
   const {
-    tripType,         // 'oneway', 'roundtrip', 'multicity'
-    segments,         // tableau de segments [{ depart, arrivee, date }]
+    tripType,
+    segments,
     adults,
     children,
   } = req.body;
@@ -166,7 +166,6 @@ app.post('/api/search-vols-dispo', (req, res) => {
 
   const totalPassagers = (adults || 0) + (children || 0);
 
-  // Récupérer tous les noms de ville nécessaires
   const villes = [];
   segments.forEach(seg => {
     if (seg.depart) villes.push(seg.depart);
@@ -187,20 +186,18 @@ app.post('/api/search-vols-dispo', (req, res) => {
       villeToId[r.ville] = r.id;
     });
 
-    // Vérification si toutes les villes ont été trouvées
     for (const seg of segments) {
       if (!villeToId[seg.depart] || !villeToId[seg.arrivee]) {
         return res.status(404).json({ error: `Aéroport introuvable pour ${seg.depart} ou ${seg.arrivee}` });
       }
     }
 
-    // Exécuter toutes les requêtes en parallèle
     const results = [];
     let pending = segments.length;
     let hasError = false;
 
     segments.forEach((seg, index) => {
-      const query = `
+      const queryExactDate = `
         SELECT v.*, 
                a1.nom AS depart_nom, 
                a2.nom AS arrivee_nom,
@@ -217,25 +214,62 @@ app.post('/api/search-vols-dispo', (req, res) => {
           AND t.places_disponibles >= ?
       `;
 
-      db.query(
-        query,
-        [villeToId[seg.depart], villeToId[seg.arrivee], seg.date, totalPassagers],
-        (err, result) => {
-          if (hasError) return;
+      const queryFallbackDates = `
+        SELECT v.*, 
+               a1.nom AS depart_nom, 
+               a2.nom AS arrivee_nom,
+               t.prix, t.devise, t.places_disponibles, c.nom AS classe
+        FROM vols v
+        JOIN aeroports a1 ON v.depart_id = a1.id
+        JOIN aeroports a2 ON v.arrivee_id = a2.id
+        JOIN tarifs_vol t ON v.id = t.vol_id
+        JOIN classes_voyage c ON t.classe_id = c.id
+        WHERE v.depart_id = ?
+          AND v.arrivee_id = ?
+          AND DATE(v.date_depart) BETWEEN DATE_SUB(?, INTERVAL 3 DAY) AND DATE_ADD(?, INTERVAL 3 DAY)
+          AND v.disponible = 1
+          AND t.places_disponibles >= ?
+        ORDER BY v.date_depart ASC
+        LIMIT 5
+      `;
 
-          if (err) {
-            hasError = true;
-            return res.status(500).json({ error: err.message });
-          }
+      const params = [
+        villeToId[seg.depart],
+        villeToId[seg.arrivee],
+        seg.date,
+        totalPassagers
+      ];
 
-          results[index] = result;
-          pending--;
-
-          if (pending === 0) {
-            res.json({ flights: results });
-          }
+      db.query(queryExactDate, params, (err, result) => {
+        if (hasError) return;
+        if (err) {
+          hasError = true;
+          return res.status(500).json({ error: err.message });
         }
-      );
+
+        if (result.length > 0) {
+          results[index] = result.map(f => ({ ...f, alternative: false }));
+          pending--;
+          if (pending === 0) {
+            return res.json({ flights: results });
+          }
+        } else {
+          // fallback dates
+          db.query(queryFallbackDates, [...params.slice(0, 3), params[2], params[3]], (err2, fallbackResults) => {
+            if (hasError) return;
+            if (err2) {
+              hasError = true;
+              return res.status(500).json({ error: err2.message });
+            }
+
+            results[index] = fallbackResults.map(f => ({ ...f, alternative: true }));
+            pending--;
+            if (pending === 0) {
+              res.json({ flights: results });
+            }
+          });
+        }
+      });
     });
   });
 });

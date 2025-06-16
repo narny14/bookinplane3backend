@@ -129,6 +129,29 @@ app.get('/api/reservations/:utilisateur_id', (req, res) => {
 });
 
 // ======================================================
+// Recherche filtrée des vols
+app.get('/api/search-vols', (req, res) => {
+  const { from, to, date } = req.query;
+
+  if (!from || !to || !date) {
+    return res.status(400).json({ error: 'Paramètres from, to et date requis' });
+  }
+
+  const query = `
+    SELECT v.*, a1.nom AS depart_nom, a2.nom AS arrivee_nom
+    FROM vols v
+    JOIN aeroports a1 ON v.depart_id = a1.id
+    JOIN aeroports a2 ON v.arrivee_id = a2.id
+    WHERE a1.ville = ? AND a2.ville = ? AND DATE(v.date_depart) = ?
+      AND v.disponible = 1
+  `;
+
+  db.query(query, [from, to, date], (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
+  });
+});
+
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);

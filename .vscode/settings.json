@@ -9,9 +9,9 @@
             "server": "yamabiko.proxy.rlwy.net",
             "port": 51719,
             "driver": "MySQL",
-            "name": "Railway MySQL",
             "database": "railway",
-            "username": "root"
+            "username": "root",
+            "name": "Railway MySQLs"
         }
     ]
 }

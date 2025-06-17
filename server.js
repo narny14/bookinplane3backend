@@ -1,8 +1,8 @@
 const express = require('express');
 const app = express();
-const importRouter = require('./import');
+//const importRouter = require('./import');
 
-app.use('/import', importRouter);
+//app.use('/import', importRouter);
 const importRoute = require('./import');
 app.use('/import', importRoute);
 

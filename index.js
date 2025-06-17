@@ -214,7 +214,7 @@ app.post('/api/search-vols-dispo', (req, res) => {
           AND t.places_disponibles >= ?
       `;
 
-      const queryFallbackDates = `
+      const queryFutureDates = `
         SELECT v.*, 
                a1.nom AS depart_nom, 
                a2.nom AS arrivee_nom,
@@ -226,11 +226,11 @@ app.post('/api/search-vols-dispo', (req, res) => {
         JOIN classes_voyage c ON t.classe_id = c.id
         WHERE v.depart_id = ?
           AND v.arrivee_id = ?
-          AND DATE(v.date_depart) BETWEEN DATE_SUB(?, INTERVAL 3 DAY) AND DATE_ADD(?, INTERVAL 3 DAY)
+          AND DATE(v.date_depart) >= DATE(?)
           AND v.disponible = 1
           AND t.places_disponibles >= ?
         ORDER BY v.date_depart ASC
-        LIMIT 5
+        LIMIT 10
       `;
 
       const params = [
@@ -240,32 +240,32 @@ app.post('/api/search-vols-dispo', (req, res) => {
         totalPassagers
       ];
 
-      db.query(queryExactDate, params, (err, result) => {
+      db.query(queryExactDate, params, (err, exactResults) => {
         if (hasError) return;
         if (err) {
           hasError = true;
           return res.status(500).json({ error: err.message });
         }
 
-        if (result.length > 0) {
-          results[index] = result.map(f => ({ ...f, alternative: false }));
+        if (exactResults.length > 0) {
+          results[index] = exactResults.map(f => ({ ...f, alternative: false }));
           pending--;
           if (pending === 0) {
-            return res.json({ flights: results });
+            return res.json({ tripType, flights: results });
           }
         } else {
-          // fallback dates
-          db.query(queryFallbackDates, [...params.slice(0, 3), params[2], params[3]], (err2, fallbackResults) => {
+          // Aucune correspondance exacte, chercher les dates futures
+          db.query(queryFutureDates, params, (err2, futureResults) => {
             if (hasError) return;
             if (err2) {
               hasError = true;
               return res.status(500).json({ error: err2.message });
             }
 
-            results[index] = fallbackResults.map(f => ({ ...f, alternative: true }));
+            results[index] = futureResults.map(f => ({ ...f, alternative: true }));
             pending--;
             if (pending === 0) {
-              res.json({ flights: results });
+              return res.json({ tripType, flights: results });
             }
           });
         }

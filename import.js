@@ -11,7 +11,11 @@ const connection = mysql.createConnection({
   password: 'ebRRVBYJQXgnBSLYyqctgCFUfXAgUBWp',
   database: 'railway'
 });
+router.get('/', (req, res) => {
+  return res.send("✅ Route import opérationnelle !");
+});
 
+/*
 router.get('/', (req, res) => {
   const sqlFile = './insertion_vols_et_tarifs.sql';
 
@@ -41,6 +45,6 @@ router.get('/', (req, res) => {
   };
 
   runNext();
-});
+});*/
 
 module.exports = router;

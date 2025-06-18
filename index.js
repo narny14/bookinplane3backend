@@ -75,6 +75,26 @@ app.get('/api/vols/:id', (req, res) => {
   });
 });
 
+// Route pour lire la liste des aéroports
+// GET /airports : liste unique des villes d’aéroports en RDC
+app.get('/airports', (req, res) => {
+  const sql = `
+    SELECT DISTINCT ville AS label, ville AS value
+    FROM aeroports
+    WHERE pays = 'RDC'
+    ORDER BY ville ASC
+  `;
+
+  db.query(sql, (err, results) => {
+    if (err) {
+      console.error('❌ Erreur récupération aéroports :', err);
+      return res.status(500).json({ error: 'Erreur récupération des aéroports' });
+    }
+    res.json(results);
+  });
+});
+
+
 // Réservation
 app.post('/api/reservations', (req, res) => {
   const { utilisateur_id, vol_id, classe_id, passagers, poids_kg } = req.body;

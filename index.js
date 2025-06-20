@@ -172,7 +172,6 @@ app.get('/api/search-vols', (req, res) => {
   });
 });
 
-corrigeons la requete pour mieux affiches les donnes selon le champ 'disponible' si c'est egal à 1, il faut afficher obligatoirement  
 
 app.post('/api/search-vols-dispo', (req, res) => {
   const {

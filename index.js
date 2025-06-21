@@ -219,7 +219,7 @@ app.post('/api/search-vols-dispo', (req, res) => {
       JOIN classes_voyage c ON t.classe_id = c.id
       WHERE v.depart_id = ?
         AND v.arrivee_id = ?
-        AND DATE(v.date_depart) = ?
+        AND DATE(v.date_depart) = DATE(?)
         AND v.disponible = 1
         AND t.places_disponibles >= ?
     `;
@@ -243,12 +243,18 @@ app.post('/api/search-vols-dispo', (req, res) => {
       LIMIT 10
     `;
 
+    const formatToDateTime = (dateStr) => {
+      return `${dateStr} 00:00:00`;
+    };
+
     const searchSegment = (seg) => {
       return new Promise((resolve, reject) => {
+        const formattedDate = formatToDateTime(seg.date);
+
         const params = [
           villeToId[seg.depart],
           villeToId[seg.arrivee],
-          seg.date,
+          formattedDate,
           totalPassagers
         ];
 
@@ -261,7 +267,6 @@ app.post('/api/search-vols-dispo', (req, res) => {
             console.log("→ Vol exact trouvé:", exactResults.length);
             resolve(exactResults.map(f => ({ ...f, alternative: false })));
           } else {
-            // Recherche des alternatives si aucun vol exact
             db.query(queryFutureDates, params, (err2, futureResults) => {
               if (err2) return reject(err2);
 

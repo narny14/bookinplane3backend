@@ -102,6 +102,8 @@ app.post('/add', (req, res) => {
     vol_id,
     classe_id,
     nom,
+    prenom,
+    telephone,
     email,
     adresse,
     ville,
@@ -123,7 +125,7 @@ app.post('/add', (req, res) => {
     gates
   } = req.body;
 
-  if (!utilisateur_id || !vol_id || !classe_id || !nom || !email) {
+  if (!vol_id || !classe_id || !nom || !email) {
     return res.status(400).json({ error: 'Champs obligatoires manquants' });
   }
 
@@ -131,55 +133,100 @@ app.post('/add', (req, res) => {
   const expirationPasseportFormatted = expiration_passeport ? new Date(expiration_passeport).toISOString().split('T')[0] : null;
   const dateVolFormatted = fdate ? new Date(fdate).toISOString().split('T')[0] : null;
 
-  const sql = `
-    INSERT INTO reservations (
-      utilisateur_id, vol_id, classe_id,
-      nom, email, adresse, ville, date_naissance,
-      pays, passeport, expiration_passeport,
-      place_selectionnee,
-      airline_id, class_text, code_vol,
-      heure_depart, heure_arrivee, date_vol,
-      aeroport_depart, aeroport_arrivee, duree_vol,
-      prix, gates, statut
-    )
-    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
-  `;
+  // Fonction pour insérer la réservation
+  const insertReservation = (finalUtilisateurId) => {
+    const sql = `
+      INSERT INTO reservations (
+        utilisateur_id, vol_id, classe_id,
+        nom, email, adresse, ville, date_naissance,
+        pays, passeport, expiration_passeport,
+        place_selectionnee,
+        airline_id, class_text, code_vol,
+        heure_depart, heure_arrivee, date_vol,
+        aeroport_depart, aeroport_arrivee, duree_vol,
+        prix, gates, statut
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+    `;
 
-  const values = [
-    utilisateur_id,
-    vol_id,
-    classe_id,
-    nom,
-    email,
-    adresse || null,
-    ville || null,
-    dateNaissanceFormatted,
-    pays || null,
-    passeport || null,
-    expirationPasseportFormatted,
-    place_selectionnee || null,
-    airline,
-    classText || null,
-    code || null,
-    departure || null,
-    arrival || null,
-    dateVolFormatted,
-    from || null,
-    to || null,
-    time || null,
-    price || 0,
-    gates || null,
-  ];
+    const values = [
+      finalUtilisateurId,
+      vol_id,
+      classe_id,
+      nom,
+      email,
+      adresse || null,
+      ville || null,
+      dateNaissanceFormatted,
+      pays || null,
+      passeport || null,
+      expirationPasseportFormatted,
+      place_selectionnee || null,
+      airline,
+      classText || null,
+      code || null,
+      departure || null,
+      arrival || null,
+      dateVolFormatted,
+      from || null,
+      to || null,
+      time || null,
+      price || 0,
+      gates || null,
+    ];
 
-  console.log('Valeurs à insérer :', values);
+    console.log('Valeurs à insérer réservation :', values);
 
-  db.query(sql, values, (err, result) => {
-    if (err) {
-      console.error('Erreur lors de l\'insertion :', err);
-      return res.status(500).json({ error: 'Erreur serveur' });
-    }
-    res.json({ message: 'Réservation enregistrée avec succès', reservationId: result.insertId });
-  });
+    db.query(sql, values, (err, result) => {
+      if (err) {
+        console.error('Erreur lors de l\'insertion réservation :', err);
+        return res.status(500).json({ error: 'Erreur serveur lors de la réservation' });
+      }
+      res.json({ message: 'Réservation enregistrée avec succès', reservationId: result.insertId });
+    });
+  };
+
+  if (utilisateur_id) {
+    // Vérifier si utilisateur_id existe dans la table utilisateurs
+    db.query('SELECT id FROM utilisateurs WHERE id = ?', [utilisateur_id], (err, results) => {
+      if (err) {
+        console.error('Erreur vérification utilisateur :', err);
+        return res.status(500).json({ error: 'Erreur serveur' });
+      }
+
+      if (results.length > 0) {
+        // utilisateur_id existe, on insère directement la réservation
+        insertReservation(utilisateur_id);
+      } else {
+        // utilisateur_id n'existe pas, créer l'utilisateur d'abord
+        db.query(
+          'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
+          [nom, prenom || null, telephone || null, email],
+          (err2, resultUser) => {
+            if (err2) {
+              console.error('Erreur insertion utilisateur :', err2);
+              return res.status(500).json({ error: 'Erreur serveur lors de la création utilisateur' });
+            }
+            // Insérer réservation avec nouvel id utilisateur
+            insertReservation(resultUser.insertId);
+          }
+        );
+      }
+    });
+  } else {
+    // Pas de utilisateur_id fourni, créer utilisateur puis réservation
+    db.query(
+      'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
+      [nom, prenom || null, telephone || null, email],
+      (err3, resultUser) => {
+        if (err3) {
+          console.error('Erreur insertion utilisateur :', err3);
+          return res.status(500).json({ error: 'Erreur serveur lors de la création utilisateur' });
+        }
+        insertReservation(resultUser.insertId);
+      }
+    );
+  }
 });
 
 

@@ -147,6 +147,7 @@ app.post('/add', (req, res) => {
     from, to, time,
     price, gates
   ];
+console.log('Valeurs à insérer :', values);
 
   db.query(sql, values, (err, result) => {
     if (err) {

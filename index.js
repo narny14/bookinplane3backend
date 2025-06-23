@@ -96,6 +96,68 @@ app.get('/airports', (req, res) => {
 
 
 // Réservation
+app.post('/add', (req, res) => {
+  const {
+    utilisateur_id,
+    vol_id,
+    classe_id,
+    nom,
+    email,
+    adresse,
+    ville,
+    date_naissance,
+    pays,
+    passeport,
+    expiration_passeport,
+    place_selectionnee,
+    airline,
+    arrival,
+    classText,
+    code,
+    departure,
+    fdate,
+    from,
+    to,
+    time,
+    price,
+    gates
+  } = req.body;
+
+  const sql = `
+    INSERT INTO reservations (
+      utilisateur_id, vol_id, classe_id,
+      nom, email, adresse, ville, date_naissance,
+      pays, passeport, expiration_passeport,
+      place_selectionnee,
+      airline_id, class_text, code_vol,
+      heure_depart, heure_arrivee, date_vol,
+      aeroport_depart, aeroport_arrivee, duree_vol,
+      prix, gates, statut
+    )
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+  `;
+
+  const values = [
+    utilisateur_id, vol_id, classe_id,
+    nom, email, adresse, ville, date_naissance,
+    pays, passeport, expiration_passeport,
+    place_selectionnee,
+    airline, classText, code,
+    departure, arrival, fdate.split('T')[0],
+    from, to, time,
+    price, gates
+  ];
+
+  db.query(sql, values, (err, result) => {
+    if (err) {
+      console.error('Erreur lors de l\'insertion :', err);
+      return res.status(500).json({ error: 'Erreur serveur' });
+    }
+    res.json({ message: 'Réservation enregistrée avec succès', reservationId: result.insertId });
+  });
+});
+
+
 app.post('/api/reservations', (req, res) => {
   const { utilisateur_id, vol_id, classe_id, passagers, poids_kg } = req.body;
 

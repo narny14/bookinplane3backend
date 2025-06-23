@@ -123,6 +123,14 @@ app.post('/add', (req, res) => {
     gates
   } = req.body;
 
+  if (!utilisateur_id || !vol_id || !classe_id || !nom || !email) {
+    return res.status(400).json({ error: 'Champs obligatoires manquants' });
+  }
+
+  const dateNaissanceFormatted = date_naissance ? new Date(date_naissance).toISOString().split('T')[0] : null;
+  const expirationPasseportFormatted = expiration_passeport ? new Date(expiration_passeport).toISOString().split('T')[0] : null;
+  const dateVolFormatted = fdate ? new Date(fdate).toISOString().split('T')[0] : null;
+
   const sql = `
     INSERT INTO reservations (
       utilisateur_id, vol_id, classe_id,
@@ -138,16 +146,32 @@ app.post('/add', (req, res) => {
   `;
 
   const values = [
-    utilisateur_id, vol_id, classe_id,
-    nom, email, adresse, ville, date_naissance,
-    pays, passeport, expiration_passeport,
-    place_selectionnee,
-    airline, classText, code,
-    departure, arrival, fdate.split('T')[0],
-    from, to, time,
-    price, gates
+    utilisateur_id,
+    vol_id,
+    classe_id,
+    nom,
+    email,
+    adresse || null,
+    ville || null,
+    dateNaissanceFormatted,
+    pays || null,
+    passeport || null,
+    expirationPasseportFormatted,
+    place_selectionnee || null,
+    airline,
+    classText || null,
+    code || null,
+    departure || null,
+    arrival || null,
+    dateVolFormatted,
+    from || null,
+    to || null,
+    time || null,
+    price || 0,
+    gates || null,
   ];
-console.log('Valeurs à insérer :', values);
+
+  console.log('Valeurs à insérer :', values);
 
   db.query(sql, values, (err, result) => {
     if (err) {
@@ -157,6 +181,7 @@ console.log('Valeurs à insérer :', values);
     res.json({ message: 'Réservation enregistrée avec succès', reservationId: result.insertId });
   });
 });
+
 
 
 app.post('/api/reservations', (req, res) => {

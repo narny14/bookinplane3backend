@@ -94,11 +94,17 @@ app.get('/airports', (req, res) => {
   });
 });
 
+const fs = require('fs');
+const PDFDocument = require('pdfkit');
+const nodemailer = require('nodemailer');
+const path = require('path');
+
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;
 
   try {
-    const result = await db.query(
+    // 1. Insertion MySQL
+    await db.query(
       'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
       [
         data.utilisateurs_id,
@@ -117,12 +123,61 @@ app.post('/cartbillets', async (req, res) => {
       ]
     );
 
-    res.status(200).json({ message: 'Réservation enregistrée' });
+    // 2. Générer le PDF
+    const doc = new PDFDocument();
+    const pdfPath = path.join(__dirname, `billet-${data.code}.pdf`);
+    doc.pipe(fs.createWriteStream(pdfPath));
+
+    doc.fontSize(20).text('Billet de Réservation', { align: 'center' });
+    doc.moveDown();
+
+    doc.fontSize(12).text(`Numéro de réservation: ${data.code}`);
+    doc.text(`Nom du passager ID: ${data.utilisateurs_id}`);
+    doc.text(`Compagnie: ${data.airline}`);
+    doc.text(`Date de vol: ${data.date}`);
+    doc.text(`Classe: ${data.classText}`);
+    doc.text(`Départ: ${data.departure} depuis ${data.from}`);
+    doc.text(`Arrivée: ${data.arrival} à ${data.to}`);
+    doc.text(`Siège: ${data.selectedSeat}`);
+    doc.text(`Prix: ${data.price} $`);
+    doc.text(`Méthode de paiement: ${data.paymentMethod}`);
+    doc.end();
+
+    await new Promise(resolve => doc.on('finish', resolve));
+
+    // 3. Envoi simple par email
+    const transporter = nodemailer.createTransport({
+      service: 'gmail',
+      auth: {
+        user: 'spencermimo@gmail.com', // Remplace par ton adresse Gmail
+        pass: 'iqvc rnjr uhms ukok' // Mot de passe d'application généré via https://myaccount.google.com/apppasswords
+      }
+    });
+
+    await transporter.sendMail({
+      from: '"Booking Plane" <spencermimo@gmail.com>',
+      to: data.email, // Email du client
+      subject: 'Votre billet de voyage',
+      text: `Bonjour,\n\nVeuillez trouver ci-joint votre billet de réservation.\nMerci d’avoir choisi Booking Plane.`,
+      attachments: [
+        {
+          filename: `billet-${data.code}.pdf`,
+          path: pdfPath
+        }
+      ]
+    });
+
+    // Supprimer le fichier PDF après l’envoi
+    fs.unlinkSync(pdfPath);
+
+    res.status(200).json({ message: 'Réservation enregistrée et email envoyé.' });
+
   } catch (err) {
-    console.error(err);
+    console.error('Erreur serveur:', err);
     res.status(500).json({ message: 'Erreur serveur' });
   }
 });
+
 
 // Réservation
 app.post('/add', async (req, res) => {

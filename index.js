@@ -2,10 +2,6 @@ const express = require('express');
 const mysql = require('mysql2/promise');
 const dotenv = require('dotenv');
 const cors = require('cors');
-const fs = require('fs');
-const PDFDocument = require('pdfkit');
-const nodemailer = require('nodemailer');
-const path = require('path');
 
 dotenv.config();
 
@@ -15,25 +11,22 @@ const PORT = process.env.PORT || 5000;
 app.use(cors());
 app.use(express.json());
 
-let db;
+// Connexion MySQL Railway
+const db = mysql.createConnection({
+  host: process.env.DB_HOST,
+  user: process.env.DB_USER,
+  password: process.env.DB_PASSWORD,
+  database: process.env.DB_NAME,
+  port: process.env.DB_PORT
+});
 
-(async () => {
-  try {
-    db = await mysql.createPool({
-      host: process.env.DB_HOST,
-      user: process.env.DB_USER,
-      password: process.env.DB_PASSWORD,
-      database: process.env.DB_NAME,
-      port: process.env.DB_PORT,
-      waitForConnections: true,
-      connectionLimit: 10,
-      queueLimit: 0
-    });
-    console.log('✅ Connecté à Railway MySQL');
-  } catch (err) {
+db.connect(err => {
+  if (err) {
     console.error('❌ Erreur de connexion MySQL :', err.message);
+  } else {
+    console.log('✅ Connecté à Railway MySQL');
   }
-})();
+});
 
 // ====================== ROUTES =======================
 
@@ -101,6 +94,10 @@ app.get('/airports', (req, res) => {
   });
 });
 
+const fs = require('fs');
+const PDFDocument = require('pdfkit');
+const nodemailer = require('nodemailer');
+const path = require('path');
 
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;

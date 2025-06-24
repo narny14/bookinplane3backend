@@ -99,36 +99,36 @@ const PDFDocument = require('pdfkit');
 const nodemailer = require('nodemailer');
 const path = require('path');
 
-app.post('/cartbillets', async (req, res) => {
+app.post('/cartbillets', (req, res) => {
   const data = req.body;
 
-  console.log('REQUETE REÇUE DANS /cartbillets :', data); // ← AJOUTE CECI
+  console.log('REQUETE REÇUE DANS /cartbillets :', data);
 
-  try {
-    // 1. Insertion MySQL
-    await db.query(
-      'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-      [
-        data.utilisateurs_id,
-        data.flight_id,
-        data.airline,
-        data.departure,
-        data.arrival,
-        data.from,
-        data.to,
-        data.price,
-        data.date,
-        data.classText,
-        data.code,
-        data.selectedSeat,
-        data.paymentMethod
-      ]
-    );
-
+  // 1. Insertion MySQL (promesse)
+  db.query(
+    'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    [
+      data.utilisateurs_id,
+      data.flight_id,
+      data.airline,
+      data.departure,
+      data.arrival,
+      data.from,
+      data.to,
+      data.price,
+      data.date,
+      data.classText,
+      data.code,
+      data.selectedSeat,
+      data.paymentMethod
+    ]
+  )
+  .then(() => {
     // 2. Générer le PDF
     const doc = new PDFDocument();
     const pdfPath = path.join(__dirname, `billet-${data.code}.pdf`);
-    doc.pipe(fs.createWriteStream(pdfPath));
+    const writeStream = fs.createWriteStream(pdfPath);
+    doc.pipe(writeStream);
 
     doc.fontSize(20).text('Billet de Réservation', { align: 'center' });
     doc.moveDown();
@@ -145,20 +145,25 @@ app.post('/cartbillets', async (req, res) => {
     doc.text(`Méthode de paiement: ${data.paymentMethod}`);
     doc.end();
 
-    await new Promise(resolve => doc.on('finish', resolve));
-
-    // 3. Envoi simple par email
+    // attendre la fin du PDF via un événement
+    return new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    }).then(() => pdfPath);
+  })
+  .then((pdfPath) => {
+    // 3. Envoi email
     const transporter = nodemailer.createTransport({
       service: 'gmail',
       auth: {
-        user: 'spencermimo@gmail.com', // Remplace par ton adresse Gmail
-        pass: 'iqvc rnjr uhms ukok' // Mot de passe d'application généré via https://myaccount.google.com/apppasswords
+        user: 'spencermimo@gmail.com',
+        pass: 'iqvc rnjr uhms ukok'
       }
     });
 
-    await transporter.sendMail({
+    return transporter.sendMail({
       from: '"Booking Plane" <spencermimo@gmail.com>',
-      to: data.email, // Email du client
+      to: data.email,
       subject: 'Votre billet de voyage',
       text: `Bonjour,\n\nVeuillez trouver ci-joint votre billet de réservation.\nMerci d’avoir choisi Booking Plane.`,
       attachments: [
@@ -167,19 +172,20 @@ app.post('/cartbillets', async (req, res) => {
           path: pdfPath
         }
       ]
-    });
-
+    })
+    .then(() => pdfPath);
+  })
+  .then((pdfPath) => {
     // Supprimer le fichier PDF après l’envoi
     fs.unlinkSync(pdfPath);
-
     res.status(200).json({ message: 'Réservation enregistrée et email envoyé.' });
-
-  } catch (err) {
-    console.error('Erreur serveur :', err); // ← AJOUT OBLIGATOIRE
-res.status(500).json({ message: 'Erreur serveur', error: err.message });
-
-  }
+  })
+  .catch(err => {
+    console.error('Erreur serveur :', err);
+    res.status(500).json({ message: 'Erreur serveur', error: err.message });
+  });
 });
+
 
 
 // Réservation

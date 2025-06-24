@@ -101,12 +101,21 @@ const path = require('path');
 
 app.post('/cartbillets', (req, res) => {
   const data = req.body;
-
   console.log('REQUETE REÇUE DANS /cartbillets :', data);
 
-  // 1. Insertion MySQL (promesse)
+  // Vérification basique des champs
+  if (!data.email) {
+    console.error('Erreur : email manquant');
+    return res.status(400).json({ message: 'Email manquant' });
+  }
+  if (!data.code) {
+    console.error('Erreur : code manquant');
+    return res.status(400).json({ message: 'Code manquant' });
+  }
+
+  // 1. Insertion MySQL
   db.query(
-    'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method,email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       data.utilisateurs_id,
       data.flight_id,
@@ -120,10 +129,12 @@ app.post('/cartbillets', (req, res) => {
       data.classText,
       data.code,
       data.selectedSeat,
-      data.paymentMethod
+      data.paymentMethod,
+      data.email
     ]
   )
   .then(() => {
+    console.log('Insertion MySQL OK');
     // 2. Générer le PDF
     const doc = new PDFDocument();
     const pdfPath = path.join(__dirname, `billet-${data.code}.pdf`);
@@ -145,11 +156,16 @@ app.post('/cartbillets', (req, res) => {
     doc.text(`Méthode de paiement: ${data.paymentMethod}`);
     doc.end();
 
-    // attendre la fin du PDF via un événement
     return new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    }).then(() => pdfPath);
+      writeStream.on('finish', () => {
+        console.log('PDF généré:', pdfPath);
+        resolve(pdfPath);
+      });
+      writeStream.on('error', (err) => {
+        console.error('Erreur écriture PDF:', err);
+        reject(err);
+      });
+    });
   })
   .then((pdfPath) => {
     // 3. Envoi email
@@ -173,15 +189,21 @@ app.post('/cartbillets', (req, res) => {
         }
       ]
     })
-    .then(() => pdfPath);
+    .then(() => {
+      console.log('Email envoyé à', data.email);
+      return pdfPath;
+    });
   })
   .then((pdfPath) => {
     // Supprimer le fichier PDF après l’envoi
-    fs.unlinkSync(pdfPath);
+    fs.unlink(pdfPath, (err) => {
+      if (err) console.error('Erreur suppression PDF:', err);
+      else console.log('PDF supprimé:', pdfPath);
+    });
     res.status(200).json({ message: 'Réservation enregistrée et email envoyé.' });
   })
   .catch(err => {
-    console.error('Erreur serveur :', err);
+    console.error('Erreur serveur:', err);
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   });
 });

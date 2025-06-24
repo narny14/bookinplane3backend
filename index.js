@@ -94,6 +94,35 @@ app.get('/airports', (req, res) => {
   });
 });
 
+app.post('/cartbillets', async (req, res) => {
+  const data = req.body;
+
+  try {
+    const result = await db.query(
+      'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        data.utilisateurs_id,
+        data.flight_id,
+        data.airline,
+        data.departure,
+        data.arrival,
+        data.from,
+        data.to,
+        data.price,
+        data.date,
+        data.classText,
+        data.code,
+        data.selectedSeat,
+        data.paymentMethod
+      ]
+    );
+
+    res.status(200).json({ message: 'Réservation enregistrée' });
+  } catch (err) {
+    console.error(err);
+    res.status(500).json({ message: 'Erreur serveur' });
+  }
+});
 
 // Réservation
 app.post('/add', async (req, res) => {

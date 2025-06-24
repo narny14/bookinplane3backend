@@ -209,7 +209,6 @@ app.post('/cartbillets', (req, res) => {
 });
 
 
-
 // Réservation
 app.post('/add', async (req, res) => {
   try {
@@ -316,13 +315,17 @@ app.post('/add', async (req, res) => {
 
     await query(sqlReservation, values);
 
-    res.json({ message: 'Réservation enregistrée avec succès' });
+    // Renvoi de email + utilisateur_id au client
+    res.json({
+      message: 'Réservation enregistrée avec succès',
+      email,
+      utilisateur_id
+    });
   } catch (err) {
     console.error('Erreur serveur :', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
 });
-
 
 
 app.post('/api/reservations', (req, res) => {

@@ -102,6 +102,8 @@ const path = require('path');
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;
 
+  console.log('REQUETE REÇUE DANS /cartbillets :', data); // ← AJOUTE CECI
+
   try {
     // 1. Insertion MySQL
     await db.query(
@@ -173,8 +175,9 @@ app.post('/cartbillets', async (req, res) => {
     res.status(200).json({ message: 'Réservation enregistrée et email envoyé.' });
 
   } catch (err) {
-    console.error('Erreur serveur:', err);
-    res.status(500).json({ message: 'Erreur serveur' });
+    console.error('Erreur serveur :', err); // ← AJOUT OBLIGATOIRE
+res.status(500).json({ message: 'Erreur serveur', error: err.message });
+
   }
 });
 

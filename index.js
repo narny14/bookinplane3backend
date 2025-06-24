@@ -114,7 +114,7 @@ app.post('/cartbillets', (req, res) => {
   }
 
   // 1. Insertion MySQL
-  db.query(
+  db.promise().query(
     'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method,email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
     [
       data.utilisateurs_id,

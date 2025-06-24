@@ -101,10 +101,6 @@ app.get('/airports', (req, res) => {
   });
 });
 
-const fs = require('fs');
-const PDFDocument = require('pdfkit');
-const nodemailer = require('nodemailer');
-const path = require('path');
 
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;

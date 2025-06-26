@@ -208,30 +208,29 @@ app.post('/cartbillets', (req, res) => {
   });
 });
 
-// GET /reservations?email=...&user_id=...
-// GET /reservations?email=...&user_id=...
-app.get('/reservationslist', async (req, res) => {
+// GET /reservations?email=...&user_id=...// GET /reservationslist?email=...&user_id=...
+app.get('/reservationslist', (req, res) => {
   const { email, user_id } = req.query;
 
   if (!email || !user_id) {
     return res.status(400).json({ message: 'Email et user_id sont requis' });
   }
 
-  try {
-    const [rows] = await db.query(
-      `SELECT * FROM reservations 
-       WHERE email = ? AND utilisateur_id = ? 
-       ORDER BY date_reservation DESC`,
-      [email, user_id]
-    );
+  const sql = `
+    SELECT * FROM reservations 
+    WHERE email = ? AND utilisateur_id = ? 
+    ORDER BY date_reservation DESC
+  `;
 
-    res.json(rows);
-  } catch (error) {
-    console.error('Erreur serveur :', error);
-    res.status(500).json({ message: 'Erreur serveur' });
-  }
+  db.query(sql, [email, user_id], (err, results) => {
+    if (err) {
+      console.error('Erreur serveur :', err);
+      return res.status(500).json({ message: 'Erreur serveur' });
+    }
+
+    res.json(results);
+  });
 });
-
 
 
 // Réservation

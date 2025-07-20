@@ -6,12 +6,12 @@
                 "enableSsl": "Disabled"
             },
             "previewLimit": 50,
-            "server": "yamabiko.proxy.rlwy.net",
-            "port": 51719,
+            "server": "interchange.proxy.rlwy.net",
+            "port": 40928,
             "driver": "MySQL",
+            "name": "book MySQL ",
             "database": "railway",
-            "username": "root",
-            "name": "Railway MySQLs"
+            "username": "root"
         }
     ]
 }

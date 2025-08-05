@@ -1,8 +1,20 @@
-CREATE TABLE utilisateurs (
+CREATE TABLE cartbillets (
   id INT AUTO_INCREMENT PRIMARY KEY,
-  nom VARCHAR(100),
-  prenom VARCHAR(100),
-  telephone VARCHAR(20),
-  email VARCHAR(100) UNIQUE,
-  date_inscription DATETIME DEFAULT CURRENT_TIMESTAMP
+  utilisateurs_id INT,
+  flight_id INT,
+  airline VARCHAR(100),
+  departure DATETIME,
+  arrival DATETIME,
+  from_location VARCHAR(100),
+  to_location VARCHAR(100),
+  price DECIMAL(10,2),
+  date DATE,
+  class_text VARCHAR(50),
+  code VARCHAR(50),
+  seat VARCHAR(10),
+  payment_method VARCHAR(50),
+  email VARCHAR(100),
+  created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+  FOREIGN KEY (utilisateurs_id) REFERENCES utilisateurs(id),
+  FOREIGN KEY (flight_id) REFERENCES vols(id)
 );

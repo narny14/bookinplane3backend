@@ -1,3 +1,5 @@
--- Toutes les réservations
--- Vérification de la structure
+-- Voir la structure complète de la table
+DESCRIBE reservations;
+
+-- ou
 SHOW COLUMNS FROM reservations;

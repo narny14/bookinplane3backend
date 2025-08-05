@@ -234,7 +234,155 @@ app.get('/reservationslist', (req, res) => {
 
 
 // Réservation
+// Réservation multiple (oneway, roundtrip, multicity)
 app.post('/add', async (req, res) => {
+  try {
+    const {
+      nom,
+      prenom,
+      telephone,
+      email,
+      adresse,
+      ville,
+      date_naissance,
+      pays,
+      passeport,
+      expiration_passeport,
+      place_selectionnee,
+      vols, // tableau d'objets vols [{vol_id, classe_id, airline, ...}]
+    } = req.body;
+
+    if (!nom || !email || !vols || !Array.isArray(vols) || vols.length === 0) {
+      return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
+    }
+
+    // Fonction utilitaire pour exécuter une requête SQL avec promise
+    const query = (sql, params) =>
+      new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+
+    // 🔹 Formatage des dates et heures
+    const formatDate = (d) => {
+      if (!d) return null;
+      try {
+        return new Date(d).toISOString().split('T')[0]; // YYYY-MM-DD
+      } catch {
+        return null;
+      }
+    };
+
+    const formatTime = (t) => {
+      if (!t) return null;
+      try {
+        const d = new Date(t);
+        return d.toTimeString().split(' ')[0]; // HH:MM:SS
+      } catch {
+        if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
+        return null;
+      }
+    };
+
+    const dateNaissanceFormatted = formatDate(date_naissance);
+    const expirationPasseportFormatted = formatDate(expiration_passeport);
+
+    // 1️⃣ Chercher utilisateur ou le créer
+    let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
+    let utilisateur_id;
+
+    if (utilisateurs.length > 0) {
+      utilisateur_id = utilisateurs[0].id;
+    } else {
+      const insertResult = await query(
+        'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
+        [nom, prenom || null, telephone || null, email]
+      );
+      utilisateur_id = insertResult.insertId;
+    }
+
+    // 2️⃣ Insérer chaque vol dans reservations
+    for (const vol of vols) {
+      const {
+        vol_id,
+        classe_id,
+        airline,
+        arrival,
+        classText,
+        code,
+        departure,
+        fdate,
+        from,
+        to,
+        time,   // durée vol
+        price,
+        gates
+      } = vol;
+
+      const dateVolFormatted = formatDate(fdate);
+      const heureDepartFormatted = formatTime(departure);
+      const heureArriveeFormatted = formatTime(arrival);
+      const dureeVolFormatted = formatTime(time);
+
+      const sqlReservation = `
+        INSERT INTO reservations (
+          utilisateur_id, vol_id, classe_id,
+          nom, email, adresse, ville, date_naissance,
+          pays, passeport, expiration_passeport,
+          place_selectionnee,
+          airline_id, class_text, code_vol,
+          heure_depart, heure_arrivee, date_vol,
+          aeroport_depart, aeroport_arrivee, duree_vol,
+          prix, gates, statut
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+      `;
+
+      const values = [
+        utilisateur_id,
+        vol_id,
+        classe_id,
+        nom,
+        email,
+        adresse || null,
+        ville || null,
+        dateNaissanceFormatted,
+        pays || null,
+        passeport || null,
+        expirationPasseportFormatted,
+        place_selectionnee || null,
+        airline || null,
+        classText || null,
+        code || null,
+        heureDepartFormatted,
+        heureArriveeFormatted,
+        dateVolFormatted,
+        from || null,
+        to || null,
+        dureeVolFormatted,
+        price || 0,
+        gates || null,
+      ];
+
+      await query(sqlReservation, values);
+    }
+
+    // 3️⃣ Réponse finale
+    res.json({
+      message: 'Réservations enregistrées avec succès',
+      email,
+      utilisateur_id,
+      total_vols: vols.length
+    });
+
+  } catch (err) {
+    console.error('Erreur serveur :', err);
+    res.status(500).json({ error: 'Erreur serveur' });
+  }
+});
+
+/*app.post('/add', async (req, res) => {
   try {
     const {
       nom,
@@ -349,7 +497,7 @@ app.post('/add', async (req, res) => {
     console.error('Erreur serveur :', err);
     res.status(500).json({ error: 'Erreur serveur' });
   }
-});
+});*/
 
 
 app.post('/api/reservations', (req, res) => {

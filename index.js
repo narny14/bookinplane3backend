@@ -249,14 +249,14 @@ app.post('/add', async (req, res) => {
       passeport,
       expiration_passeport,
       place_selectionnee,
-      vols, // tableau d'objets vols [{vol_id, classe_id, airline, ...}]
+      vols, // [{vol_id, classe_id, airline, ...}]
     } = req.body;
 
-    if (!nom || !email || !vols || !Array.isArray(vols) || vols.length === 0) {
+    if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
       return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
     }
 
-    // Fonction utilitaire pour exécuter une requête SQL avec promise
+    // Promisify MySQL
     const query = (sql, params) =>
       new Promise((resolve, reject) => {
         db.query(sql, params, (err, results) => {
@@ -265,45 +265,42 @@ app.post('/add', async (req, res) => {
         });
       });
 
-    // 🔹 Formatage des dates et heures
+    // --- Format helpers ---
     const formatDate = (d) => {
       if (!d) return null;
-      try {
-        return new Date(d).toISOString().split('T')[0]; // YYYY-MM-DD
-      } catch {
-        return null;
+      // Si déjà YYYY-MM-DD
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      // Si JJ/MM/AAAA
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
+        const [jour, mois, annee] = d.split('/');
+        return `${annee}-${mois.padStart(2, '0')}-${jour.padStart(2, '0')}`;
       }
+      const parsed = new Date(d);
+      return isNaN(parsed) ? null : parsed.toISOString().split('T')[0];
     };
 
     const formatTime = (t) => {
       if (!t) return null;
-      try {
-        const d = new Date(t);
-        return d.toTimeString().split(' ')[0]; // HH:MM:SS
-      } catch {
-        if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
-        return null;
-      }
+      // Si déjà HH:MM:SS
+      if (/^\d{1,2}:\d{2}:\d{2}$/.test(t)) return t;
+      // Si HH:MM → ajouter :00
+      if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
+      return null; // sinon NULL MySQL
     };
 
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // 1️⃣ Chercher utilisateur ou le créer
+    // 1️⃣ Chercher ou créer utilisateur
     let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
-    let utilisateur_id;
+    let utilisateur_id = utilisateurs.length
+      ? utilisateurs[0].id
+      : (await query(
+          'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
+          [nom, prenom || null, telephone || null, email]
+        )).insertId;
 
-    if (utilisateurs.length > 0) {
-      utilisateur_id = utilisateurs[0].id;
-    } else {
-      const insertResult = await query(
-        'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
-        [nom, prenom || null, telephone || null, email]
-      );
-      utilisateur_id = insertResult.insertId;
-    }
-
-    // 2️⃣ Insérer chaque vol dans reservations
+    // 2️⃣ Insertion pour chaque vol
     for (const vol of vols) {
       const {
         vol_id,
@@ -321,23 +318,8 @@ app.post('/add', async (req, res) => {
         gates
       } = vol;
 
-      const dateVolFormatted = formatDate(fdate);
-      const heureDepartFormatted = formatTime(departure);
-      const heureArriveeFormatted = formatTime(arrival);
-      const dureeVolFormatted = formatTime(time);
-
-      const sqlReservation = `
-        INSERT INTO reservations (
-          utilisateur_id, vol_id, classe_id,
-          nom, email, adresse, ville, date_naissance,
-          pays, passeport, expiration_passeport,
-          place_selectionnee,
-          airline_id, class_text, code_vol,
-          heure_depart, heure_arrivee, date_vol,
-          aeroport_depart, aeroport_arrivee, duree_vol,
-          prix, gates, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
-      `;
+      // Skip si pas de vol_id ou classe_id
+      if (!vol_id || !classe_id) continue;
 
       const values = [
         utilisateur_id,
@@ -355,20 +337,32 @@ app.post('/add', async (req, res) => {
         airline || null,
         classText || null,
         code || null,
-        heureDepartFormatted,
-        heureArriveeFormatted,
-        dateVolFormatted,
+        formatTime(departure),
+        formatTime(arrival),
+        formatDate(fdate),
         from || null,
         to || null,
-        dureeVolFormatted,
+        formatTime(time), // durée vol
         price || 0,
         gates || null,
       ];
 
+      const sqlReservation = `
+        INSERT INTO reservations (
+          utilisateur_id, vol_id, classe_id,
+          nom, email, adresse, ville, date_naissance,
+          pays, passeport, expiration_passeport,
+          place_selectionnee,
+          airline_id, class_text, code_vol,
+          heure_depart, heure_arrivee, date_vol,
+          aeroport_depart, aeroport_arrivee, duree_vol,
+          prix, gates, statut
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+      `;
+
       await query(sqlReservation, values);
     }
 
-    // 3️⃣ Réponse finale
     res.json({
       message: 'Réservations enregistrées avec succès',
       email,
@@ -377,13 +371,12 @@ app.post('/add', async (req, res) => {
     });
 
   } catch (err) {
-  console.error('Erreur serveur :', err); // Log dans console serveur
-  res.status(500).json({
-    error: 'Erreur serveur',
-    details: err.message, // 🔹 renvoie le détail de l’erreur à l’APK
-  });
-}
-
+    console.error('Erreur serveur :', err);
+    res.status(500).json({
+      error: 'Erreur serveur',
+      details: err.message,
+    });
+  }
 });
 
 /*app.post('/add', async (req, res) => {

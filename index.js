@@ -377,9 +377,13 @@ app.post('/add', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Erreur serveur :', err);
-    res.status(500).json({ error: 'Erreur serveur' });
-  }
+  console.error('Erreur serveur :', err); // Log dans console serveur
+  res.status(500).json({
+    error: 'Erreur serveur',
+    details: err.message, // 🔹 renvoie le détail de l’erreur à l’APK
+  });
+}
+
 });
 
 /*app.post('/add', async (req, res) => {

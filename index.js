@@ -253,6 +253,7 @@ app.post('/add', async (req, res) => {
       vols, // [{vol_id, classe_id, airline, ...}]
     } = req.body;
 
+    // Validation des champs obligatoires
     if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
       return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
     }
@@ -269,113 +270,137 @@ app.post('/add', async (req, res) => {
     // --- Format helpers ---
     const formatDate = (d) => {
       if (!d) return null;
-      // Si déjà YYYY-MM-DD
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-      // Si JJ/MM/AAAA
       if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
         const [jour, mois, annee] = d.split('/');
-        return `${annee}-${mois.padStart(2, '0')}-${jour.padStart(2, '0')}`;
+        const date = new Date(`${annee}-${mois}-${jour}`);
+        return isNaN(date) ? null : date.toISOString().split('T')[0];
       }
-      const parsed = new Date(d);
-      return isNaN(parsed) ? null : parsed.toISOString().split('T')[0];
+      const date = new Date(d);
+      return isNaN(date) ? null : date.toISOString().split('T')[0];
     };
 
     const formatTime = (t) => {
       if (!t) return null;
-      // Si déjà HH:MM:SS
       if (/^\d{1,2}:\d{2}:\d{2}$/.test(t)) return t;
-      // Si HH:MM → ajouter :00
       if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
-      return null; // sinon NULL MySQL
+      return null;
     };
 
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // 1️⃣ Chercher ou créer utilisateur
-    let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
-    let utilisateur_id = utilisateurs.length
-      ? utilisateurs[0].id
-      : (await query(
+    // 1️⃣ Chercher ou créer utilisateur avec transaction
+    let utilisateur_id;
+    const connection = await db.promise().getConnection();
+    try {
+      await connection.beginTransaction();
+
+      let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email], connection);
+      if (utilisateurs.length) {
+        utilisateur_id = utilisateurs[0].id;
+      } else {
+        const result = await query(
           'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
-          [nom, prenom || null, telephone || null, email]
-        )).insertId;
+          [nom, prenom || null, telephone || null, email],
+          connection
+        );
+        utilisateur_id = result.insertId;
+      }
 
-    // 2️⃣ Insertion pour chaque vol
-    for (const vol of vols) {
-      const {
-        vol_id,
-        classe_id,
-        airline,
-        arrival,
-        classText,
-        code,
-        departure,
-        fdate,
-        from,
-        to,
-        time,   // durée vol
-        price,
-        gates
-      } = vol;
+      // 2️⃣ Insertion des réservations avec validation des vols
+      for (const vol of vols) {
+        const {
+          vol_id,
+          classe_id,
+          airline,
+          arrival,
+          classText,
+          code,
+          departure,
+          fdate,
+          from,
+          to,
+          time,
+          price,
+          gates
+        } = vol;
 
-      // Skip si pas de vol_id ou classe_id
-      if (!vol_id || !classe_id) continue;
+        // Validation des champs obligatoires du vol
+        if (!vol_id || !classe_id) {
+          throw new Error('vol_id et classe_id sont requis pour chaque vol');
+        }
 
-      const values = [
-        utilisateur_id,
-        vol_id,
-        classe_id,
-        nom,
+        // Vérifier l'existence du vol
+        const [volExists] = await query('SELECT id FROM vols WHERE id = ?', [vol_id], connection);
+        if (!volExists) {
+          throw new Error(`Vol avec id ${vol_id} non trouvé`);
+        }
+
+        const values = [
+          utilisateur_id,
+          vol_id,
+          classe_id,
+          nom,
+          email,
+          adresse || null,
+          ville || null,
+          dateNaissanceFormatted,
+          pays || null,
+          passeport || null,
+          expirationPasseportFormatted,
+          place_selectionnee || null,
+          airline || null,
+          classText || null,
+          code || null,
+          formatTime(departure),
+          formatTime(arrival),
+          formatDate(fdate),
+          from || null,
+          to || null,
+          formatTime(time),
+          price || 0,
+          gates || null,
+        ];
+
+        await query(
+          `
+            INSERT INTO reservations (
+              utilisateur_id, vol_id, classe_id,
+              nom, email, adresse, ville, date_naissance,
+              pays, passeport, expiration_passeport,
+              place_selectionnee,
+              airline_id, class_text, code_vol,
+              heure_depart, heure_arrivee, date_vol,
+              aeroport_depart, aeroport_arrivee, duree_vol,
+              prix, gates, statut
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+          `,
+          values,
+          connection
+        );
+      }
+
+      await connection.commit();
+      res.json({
+        message: 'Réservations enregistrées avec succès',
         email,
-        adresse || null,
-        ville || null,
-        dateNaissanceFormatted,
-        pays || null,
-        passeport || null,
-        expirationPasseportFormatted,
-        place_selectionnee || null,
-        airline || null,
-        classText || null,
-        code || null,
-        formatTime(departure),
-        formatTime(arrival),
-        formatDate(fdate),
-        from || null,
-        to || null,
-        formatTime(time), // durée vol
-        price || 0,
-        gates || null,
-      ];
-
-      const sqlReservation = `
-        INSERT INTO reservations (
-          utilisateur_id, vol_id, classe_id,
-          nom, email, adresse, ville, date_naissance,
-          pays, passeport, expiration_passeport,
-          place_selectionnee,
-          airline_id, class_text, code_vol,
-          heure_depart, heure_arrivee, date_vol,
-          aeroport_depart, aeroport_arrivee, duree_vol,
-          prix, gates, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
-      `;
-
-      await query(sqlReservation, values);
+        utilisateur_id,
+        total_vols: vols.length
+      });
+    } catch (err) {
+      await connection.rollback();
+      throw err; // Relancer l'erreur pour le catch extérieur
+    } finally {
+      connection.release();
     }
-
-    res.json({
-      message: 'Réservations enregistrées avec succès',
-      email,
-      utilisateur_id,
-      total_vols: vols.length
-    });
-
   } catch (err) {
     console.error('Erreur serveur :', err);
     res.status(500).json({
       error: 'Erreur serveur',
-      details: err.message,
+      details: err.message.includes('foreign key constraint fails')
+        ? 'Une contrainte de clé étrangère a échoué (vérifiez utilisateurs_id ou vol_id)'
+        : err.message,
     });
   }
 });

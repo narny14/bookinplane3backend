@@ -69,7 +69,7 @@ CREATE TABLE classes_voyage (
 
 
 CREATE TABLE cartbillets (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     utilisateurs_id INT,
     flight_id INT,
     airline VARCHAR(100),
@@ -84,7 +84,7 @@ CREATE TABLE cartbillets (
     seat VARCHAR(10),
     payment_method VARCHAR(50),
     email VARCHAR(100),
-    created_at TIMESTAMP,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
     PRIMARY KEY (id),
     FOREIGN KEY (utilisateurs_id) REFERENCES utilisateurs(id),
     FOREIGN KEY (flight_id) REFERENCES vols(id)

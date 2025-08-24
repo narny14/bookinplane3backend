@@ -87,9 +87,10 @@ app.get('/airports', (req, res) => {
 
   db.query(sql, (err, results) => {
     if (err) {
-      console.error('❌ Erreur récupération aéroports :', err);
-      return res.status(500).json({ error: 'Erreur récupération des aéroports' });
-    }
+  console.error('❌ Erreur récupération aéroports :', err);
+  return res.status(500).json({ error: err.message });
+}
+
     res.json(results);
   });
 });

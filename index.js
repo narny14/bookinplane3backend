@@ -574,7 +574,7 @@ app.get('/api/search-vols', (req, res) => {
   });
 });
 
-app.post('/api/search-vols-dispo', (req, res) => {
+/*app.post('/api/search-vols-dispo', (req, res) => {
   const { tripType, segments, adults, children } = req.body;
 
   if (!Array.isArray(segments) || segments.length === 0) {
@@ -687,6 +687,196 @@ app.post('/api/search-vols-dispo', (req, res) => {
       .catch(err => {
         console.error("Erreur lors de la recherche des vols:", err);
         res.status(500).json({ error: err.message });
+      });
+  });
+});*/
+app.post('/api/search-vols-dispo', (req, res) => {
+  const { tripType, segments, adults, children } = req.body;
+
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return res.status(400).json({ error: 'Aucun segment de vol fourni' });
+  }
+
+  const totalPassagers = (adults || 0) + (children || 0);
+
+  const villes = [];
+  segments.forEach(seg => {
+    if (seg.depart) villes.push(seg.depart);
+    if (seg.arrivee) villes.push(seg.arrivee);
+  });
+
+  const uniqueVilles = [...new Set(villes)];
+
+  const getIdsQuery = `
+    SELECT id, ville FROM aeroports WHERE ville IN (${uniqueVilles.map(() => '?').join(',')})
+  `;
+
+  db.query(getIdsQuery, uniqueVilles, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const villeToId = {};
+    rows.forEach(r => {
+      villeToId[r.ville] = r.id;
+    });
+
+    for (const seg of segments) {
+      if (!villeToId[seg.depart] || !villeToId[seg.arrivee]) {
+        return res.status(404).json({ error: `Aéroport introuvable pour ${seg.depart} ou ${seg.arrivee}` });
+      }
+    }
+
+    // CORRECTION : Requête modifiée pour mieux correspondre à votre structure de données
+    const queryExactDate = `
+      SELECT v.*, 
+             a1.nom AS depart_nom, 
+             a2.nom AS arrivee_nom,
+             a1.ville AS depart_ville,
+             a2.ville AS arrivee_ville,
+             t.prix, t.devise, t.places_disponibles, 
+             c.nom AS classe, c.id AS classe_id
+      FROM vols v
+      JOIN aeroports a1 ON v.depart_id = a1.id
+      JOIN aeroports a2 ON v.arrivee_id = a2.id
+      JOIN tarifs_vol t ON v.id = t.vol_id
+      JOIN classes_voyage c ON t.classe_id = c.id
+      WHERE v.depart_id = ?
+        AND v.arrivee_id = ?
+        AND DATE(v.date_depart) = ?
+        AND v.disponible = 1
+        AND t.places_disponibles >= ?
+      ORDER BY v.date_depart, c.id
+    `;
+
+    const queryFutureDates = `
+      SELECT v.*, 
+             a1.nom AS depart_nom, 
+             a2.nom AS arrivee_nom,
+             a1.ville AS depart_ville,
+             a2.ville AS arrivee_ville,
+             t.prix, t.devise, t.places_disponibles, 
+             c.nom AS classe, c.id AS classe_id
+      FROM vols v
+      JOIN aeroports a1 ON v.depart_id = a1.id
+      JOIN aeroports a2 ON v.arrivee_id = a2.id
+      JOIN tarifs_vol t ON v.id = t.vol_id
+      JOIN classes_voyage c ON t.classe_id = c.id
+      WHERE v.depart_id = ?
+        AND v.arrivee_id = ?
+        AND DATE(v.date_depart) >= ?
+        AND v.disponible = 1
+        AND t.places_disponibles >= ?
+      ORDER BY v.date_depart ASC, c.id
+      LIMIT 10
+    `;
+
+    // CORRECTION : Format de date simplifié
+    const formatToDate = (dateStr) => {
+      return dateStr; // La date est déjà au format YYYY-MM-DD
+    };
+
+    const searchSegment = (seg) => {
+      return new Promise((resolve, reject) => {
+        const formattedDate = formatToDate(seg.date);
+
+        const params = [
+          villeToId[seg.depart],
+          villeToId[seg.arrivee],
+          formattedDate,
+          totalPassagers
+        ];
+
+        console.log("Recherche segment:", seg, "Params:", params);
+
+        db.query(queryExactDate, params, (err, exactResults) => {
+          if (err) {
+            console.error("Erreur queryExactDate:", err);
+            return reject(err);
+          }
+
+          console.log("Résultats exacts trouvés:", exactResults.length);
+          
+          if (exactResults.length > 0) {
+            // Grouper par vol et inclure toutes les classes
+            const groupedResults = {};
+            exactResults.forEach(flight => {
+              if (!groupedResults[flight.id]) {
+                groupedResults[flight.id] = {
+                  ...flight,
+                  tarifs: []
+                };
+                delete groupedResults[flight.id].prix;
+                delete groupedResults[flight.id].devise;
+                delete groupedResults[flight.id].places_disponibles;
+                delete groupedResults[flight.id].classe;
+                delete groupedResults[flight.id].classe_id;
+              }
+              groupedResults[flight.id].tarifs.push({
+                classe_id: flight.classe_id,
+                classe: flight.classe,
+                prix: flight.prix,
+                devise: flight.devise,
+                places_disponibles: flight.places_disponibles
+              });
+            });
+            
+            resolve(Object.values(groupedResults).map(f => ({ ...f, alternative: false })));
+          } else {
+            console.log("Aucun vol exact, recherche d'alternatives...");
+            
+            db.query(queryFutureDates, params, (err2, futureResults) => {
+              if (err2) {
+                console.error("Erreur queryFutureDates:", err2);
+                return reject(err2);
+              }
+
+              console.log("Résultats alternatifs trouvés:", futureResults.length);
+              
+              // Grouper par vol et inclure toutes les classes
+              const groupedResults = {};
+              futureResults.forEach(flight => {
+                if (!groupedResults[flight.id]) {
+                  groupedResults[flight.id] = {
+                    ...flight,
+                    tarifs: []
+                  };
+                  delete groupedResults[flight.id].prix;
+                  delete groupedResults[flight.id].devise;
+                  delete groupedResults[flight.id].places_disponibles;
+                  delete groupedResults[flight.id].classe;
+                  delete groupedResults[flight.id].classe_id;
+                }
+                groupedResults[flight.id].tarifs.push({
+                  classe_id: flight.classe_id,
+                  classe: flight.classe,
+                  prix: flight.prix,
+                  devise: flight.devise,
+                  places_disponibles: flight.places_disponibles
+                });
+              });
+              
+              resolve(Object.values(groupedResults).map(f => ({ ...f, alternative: true })));
+            });
+          }
+        });
+      });
+    };
+
+    Promise.all(segments.map(searchSegment))
+      .then(results => {
+        console.log("Recherche terminée, résultats:", results.map(r => r.length));
+        res.json({ 
+          success: true,
+          tripType, 
+          segments: results,
+          message: `Recherche effectuée avec succès`
+        });
+      })
+      .catch(err => {
+        console.error("Erreur lors de la recherche des vols:", err);
+        res.status(500).json({ 
+          success: false,
+          error: "Erreur interne du serveur lors de la recherche des vols" 
+        });
       });
   });
 });

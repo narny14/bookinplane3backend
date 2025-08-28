@@ -10,7 +10,7 @@ CREATE TABLE utilisateurs (
 
 
 CREATE TABLE vols (
-    id INT NOT NULL,
+    id INT NOT NULL  AUTO_INCREMENT,
     numero_vol VARCHAR(20) UNIQUE,
     avion_id INT,
     depart_id INT,
@@ -26,7 +26,7 @@ CREATE TABLE vols (
 
 
 CREATE TABLE tarifs_vol (
-    id INT NOT NULL,
+    id INT NOT NULL  AUTO_INCREMENT,
     vol_id INT,
     classe_id INT,
     prix DECIMAL(10,2),
@@ -39,7 +39,7 @@ CREATE TABLE tarifs_vol (
 
 
 CREATE TABLE poids_bagages (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     reservation_id INT,
     poids_kg DECIMAL(5,2),
     autorise_kg DECIMAL(5,2),
@@ -49,7 +49,7 @@ CREATE TABLE poids_bagages (
 
 
 CREATE TABLE passagers (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     reservation_id INT,
     nom VARCHAR(100),
     prenom VARCHAR(100),
@@ -111,7 +111,7 @@ CREATE TABLE aeroports (
 
 
 CREATE TABLE reservations (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     utilisateur_id INT,
     vol_id INT,
     classe_id INT,

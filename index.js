@@ -32,7 +32,7 @@ db.connect(err => {
 
 // Liste des aéroports
 app.get('/api/aeroports', (req, res) => {
-  db.query('SELECT * FROM aeroports', (err, result) => {
+  db.query('SELECT * FROM aeroports  WHERE id != 11', (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
     res.json(result);
   });

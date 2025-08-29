@@ -574,7 +574,7 @@ app.get('/api/search-vols', (req, res) => {
   });
 });
 
-/*app.post('/api/search-vols-dispo', (req, res) => {
+app.post('/api/search-vols-dispo', (req, res) => {
   const { tripType, segments, adults, children } = req.body;
 
   if (!Array.isArray(segments) || segments.length === 0) {
@@ -689,8 +689,8 @@ app.get('/api/search-vols', (req, res) => {
         res.status(500).json({ error: err.message });
       });
   });
-});*/
-app.post('/api/search-vols-dispo', (req, res) => {
+});
+/*app.post('/api/search-vols-dispo', (req, res) => {
   const { tripType, segments, adults, children } = req.body;
 
   if (!Array.isArray(segments) || segments.length === 0) {
@@ -879,7 +879,7 @@ app.post('/api/search-vols-dispo', (req, res) => {
         });
       });
   });
-});
+});*/
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);

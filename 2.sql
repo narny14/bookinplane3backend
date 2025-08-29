@@ -1,5 +1,5 @@
 CREATE TABLE utilisateurs (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     nom VARCHAR(100),
     prenom VARCHAR(100),
     telephone VARCHAR(20),
@@ -92,7 +92,7 @@ CREATE TABLE cartbillets (
 
 
 CREATE TABLE avions (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     numero_avion VARCHAR(20) UNIQUE,
     modele VARCHAR(100),
     capacite_total INT,
@@ -101,7 +101,7 @@ CREATE TABLE avions (
 
 
 CREATE TABLE aeroports (
-    id INT NOT NULL,
+    id INT NOT NULL AUTO_INCREMENT,
     nom VARCHAR(100),
     code_iata VARCHAR(10),
     ville VARCHAR(100),

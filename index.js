@@ -573,8 +573,108 @@ app.get('/api/search-vols', (req, res) => {
     res.json(result);
   });
 });
-
 app.post('/api/search-vols-dispo', (req, res) => {
+  const { tripType, segments, adults, children } = req.body;
+  const totalPassagers = (adults || 0) + (children || 0);
+
+  if (!Array.isArray(segments) || segments.length === 0) {
+    return res.status(400).json({ error: 'Aucun segment de vol fourni' });
+  }
+
+  // Collecte toutes les villes utilisées pour éviter des erreurs de jointure
+  const villes = [];
+  segments.forEach(seg => {
+    if (seg.depart) villes.push(seg.depart);
+    if (seg.arrivee) villes.push(seg.arrivee);
+  });
+  const uniqueVilles = [...new Set(villes)];
+
+  const getIdsQuery = `
+    SELECT id, ville, latitude, longitude FROM aeroports WHERE ville IN (${uniqueVilles.map(() => '?').join(',')})
+  `;
+
+  db.query(getIdsQuery, uniqueVilles, (err, rows) => {
+    if (err) return res.status(500).json({ error: err.message });
+
+    const villeMap = {};
+    rows.forEach(r => villeMap[r.ville] = r);
+
+    // Vérifier que toutes les villes existent
+    for (const seg of segments) {
+      if (!villeMap[seg.depart] || !villeMap[seg.arrivee]) {
+        return res.status(404).json({ error: `Aéroport introuvable pour ${seg.depart} ou ${seg.arrivee}` });
+      }
+    }
+
+    // Génération SQL dynamique pour les segments et les dates
+    const dateStart = segments[0].date;
+    const dateEnd = segments[segments.length-1].date; // on peut ajuster selon le tripType
+
+    const tripSqlSegments = segments.map((seg, idx) => {
+      const dep = villeMap[seg.depart];
+      const arr = villeMap[seg.arrivee];
+      const directionOrder = idx + 1; // permet de trier
+      return `SELECT ${directionOrder} AS ordre,
+                     '${seg.depart}' AS ville_depart,
+                     '${seg.arrivee}' AS ville_arrivee,
+                     '${tripType}' AS type_voyage,
+                     ${dep.latitude} AS dep_lat,
+                     ${dep.longitude} AS dep_lon,
+                     ${arr.latitude} AS arr_lat,
+                     ${arr.longitude} AS arr_lon`;
+    }).join(' UNION ALL ');
+
+    const finalQuery = `
+      WITH RECURSIVE dates AS (
+        SELECT DATE(?) AS jour
+        UNION ALL
+        SELECT DATE_ADD(jour, INTERVAL 1 DAY)
+        FROM dates
+        WHERE jour <= ?
+      ),
+      segments AS (
+        ${tripSqlSegments}
+      )
+      SELECT 
+        d.jour AS date_depart,
+        s.type_voyage,
+        s.ville_depart,
+        s.ville_arrivee,
+        ROUND(
+          (6371 * ACOS(
+            COS(RADIANS(s.dep_lat)) * COS(RADIANS(s.arr_lat)) *
+            COS(RADIANS(s.arr_lon) - RADIANS(s.dep_lon)) +
+            SIN(RADIANS(s.dep_lat)) * SIN(RADIANS(s.arr_lat))
+          )) * p.prix_km_economy, 2
+        ) AS prix_economy,
+        ROUND(
+          (6371 * ACOS(
+            COS(RADIANS(s.dep_lat)) * COS(RADIANS(s.arr_lat)) *
+            COS(RADIANS(s.arr_lon) - RADIANS(s.dep_lon)) +
+            SIN(RADIANS(s.dep_lat)) * SIN(RADIANS(s.arr_lat))
+          )) * p.prix_km_first_class, 2
+        ) AS prix_first_class,
+        ROUND(
+          (6371 * ACOS(
+            COS(RADIANS(s.dep_lat)) * COS(RADIANS(s.arr_lat)) *
+            COS(RADIANS(s.arr_lon) - RADIANS(s.dep_lon)) +
+            SIN(RADIANS(s.dep_lat)) * SIN(RADIANS(s.arr_lat))
+          )) * p.prix_km_vip, 2
+        ) AS prix_vip
+      FROM dates d
+      CROSS JOIN segments s
+      JOIN prix p ON 1=1
+      ORDER BY d.jour, s.ordre
+    `;
+
+    db.query(finalQuery, [dateStart, dateEnd], (err2, results) => {
+      if (err2) return res.status(500).json({ error: err2.message });
+      res.json({ tripType, flights: results });
+    });
+  });
+});
+
+/*app.post('/api/search-vols-dispo', (req, res) => {
   const { tripType, segments, adults, children } = req.body;
 
   if (!Array.isArray(segments) || segments.length === 0) {
@@ -689,7 +789,7 @@ app.post('/api/search-vols-dispo', (req, res) => {
         res.status(500).json({ error: err.message });
       });
   });
-});
+});***/
 /*app.post('/api/search-vols-dispo', (req, res) => {
   const { tripType, segments, adults, children } = req.body;
 

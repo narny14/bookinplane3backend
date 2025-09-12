@@ -139,3 +139,10 @@ CREATE TABLE reservations (
 );
 
 
+CREATE TABLE prix (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    prix_km_economy DECIMAL(10,2) NOT NULL,
+    prix_km_first_class DECIMAL(10,2) NOT NULL,
+    prix_km_vip DECIMAL(10,2) NOT NULL
+);
+

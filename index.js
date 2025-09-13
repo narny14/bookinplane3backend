@@ -100,6 +100,142 @@ const PDFDocument = require('pdfkit');
 const nodemailer = require('nodemailer');
 const path = require('path');
 
+app.post('/cartbillets', async (req, res) => {
+  const data = req.body;
+  console.log('REQUETE REÇUE DANS /cartbillets :', data);
+
+  try {
+    // Vérification basique des champs
+    if (!data.email) {
+      console.error('Erreur : email manquant');
+      return res.status(400).json({ message: 'Email manquant' });
+    }
+
+    // 1. Insertion MySQL
+    const [result] = await db.promise().query(
+      'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      [
+        data.utilisateurs_id,
+        data.flight_id,
+        data.airline,
+        data.departure,
+        data.arrival,
+        data.from,
+        data.to,
+        data.price,
+        data.date,
+        data.classText,
+        data.code,
+        data.selectedSeat,
+        data.paymentMethod,
+        data.email
+      ]
+    );
+
+    console.log('Insertion MySQL OK, ID:', result.insertId);
+
+    // 2. Générer le PDF
+    const doc = new PDFDocument();
+    const pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
+    
+    // Créer le dossier temp s'il n'existe pas
+    if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+      fs.mkdirSync(path.join(__dirname, 'temp'));
+    }
+
+    const writeStream = fs.createWriteStream(pdfPath);
+    doc.pipe(writeStream);
+
+    // Contenu du PDF
+    doc.fontSize(20).text('Billet de Réservation', { align: 'center' });
+    doc.moveDown();
+    doc.fontSize(12)
+      .text(`Numéro de réservation: ${data.code}`)
+      .text(`Passager ID: ${data.utilisateurs_id}`)
+      .text(`Email: ${data.email}`)
+      .text(`Compagnie: ${data.airline}`)
+      .text(`Date de vol: ${data.date}`)
+      .text(`Classe: ${data.classText}`)
+      .text(`Départ: ${data.departure} depuis ${data.from}`)
+      .text(`Arrivée: ${data.arrival} à ${data.to}`)
+      .text(`Siège: ${data.selectedSeat || 'Non assigné'}`)
+      .text(`Prix: ${data.price} ${data.currency || 'USD'}`)
+      .text(`Méthode de paiement: ${data.paymentMethod}`);
+
+    doc.end();
+
+    // Attendre la fin de l'écriture du PDF
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
+
+    console.log('PDF généré:', pdfPath);
+
+    // 3. Envoi email (optionnel - peut être commenté pour tester)
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER || 'spencermimo@gmail.com',
+          pass: process.env.EMAIL_PASS || 'iqvc rnjr uhms ukok'
+        }
+      });
+
+      await transporter.sendMail({
+        from: '"Booking Plane" <spencermimo@gmail.com>',
+        to: data.email,
+        subject: 'Votre billet de voyage',
+        text: `Bonjour,\n\nVeuillez trouver ci-joint votre billet de réservation.\nNuméro de réservation: ${data.code}\nMerci d'avoir choisi Booking Plane.`,
+        attachments: [
+          {
+            filename: `billet-${data.code}.pdf`,
+            path: pdfPath
+          }
+        ]
+      });
+
+      console.log('Email envoyé à', data.email);
+    } catch (emailError) {
+      console.warn('Erreur envoi email (non critique):', emailError.message);
+      // On continue même si l'email échoue
+    }
+
+    // 4. Nettoyage du fichier PDF
+    try {
+      fs.unlinkSync(pdfPath);
+      console.log('PDF temporaire supprimé');
+    } catch (cleanupError) {
+      console.warn('Erreur suppression PDF:', cleanupError.message);
+    }
+
+    // 5. Réponse succès
+    res.status(200).json({ 
+      message: 'Réservation enregistrée avec succès',
+      reservationId: result.insertId,
+      code: data.code
+    });
+
+  } catch (error) {
+    console.error('Erreur serveur complète:', error);
+    
+    // Essayez de supprimer le fichier PDF en cas d'erreur
+    try {
+      if (pdfPath && fs.existsSync(pdfPath)) {
+        fs.unlinkSync(pdfPath);
+      }
+    } catch (cleanupError) {
+      console.error('Erreur nettoyage après erreur:', cleanupError);
+    }
+
+    res.status(500).json({ 
+      message: 'Erreur lors de la réservation',
+      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'
+    });
+  }
+});
+
+/*
 app.post('/cartbillets', (req, res) => {
   const data = req.body;
   console.log('REQUETE REÇUE DANS /cartbillets :', data);
@@ -207,7 +343,7 @@ app.post('/cartbillets', (req, res) => {
     console.error('Erreur serveur:', err);
     res.status(500).json({ message: 'Erreur serveur', error: err.message });
   });
-});
+});*/
 
 // GET /reservations?email=...&user_id=...// GET /reservationslist?email=...&user_id=...
 app.get('/reservationslist', (req, res) => {

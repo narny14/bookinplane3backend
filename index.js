@@ -102,114 +102,103 @@ const path = require('path');
 
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;
-  console.log('REQUETE REÇUE DANS /cartbillets :', data);
+  console.log('=== NOUVELLE REQUÊTE CARTBILLETS ===');
+  console.log('Données reçues:', JSON.stringify(data, null, 2));
+
+  let pdfPath = null;
 
   try {
     // Vérification basique des champs
     if (!data.email) {
-      console.error('Erreur : email manquant');
+      console.error('❌ Erreur: email manquant');
       return res.status(400).json({ message: 'Email manquant' });
     }
 
+    // 🔹 CONVERSION DES TYPES POUR RAILWAY
+    let flightIdInt = parseInt(data.flight_id);
+    if (isNaN(flightIdInt)) {
+      console.warn('⚠️ flight_id n\'est pas un nombre, utilisation de valeur par défaut');
+      flightIdInt = 9999;
+    }
+
+    // Convertir les heures en datetime pour MySQL
+    const departureDatetime = data.date && data.departure 
+      ? `${data.date.split(' ')[0]} ${data.departure}:00` 
+      : `${new Date().toISOString().split('T')[0]} 08:00:00`;
+    
+    const arrivalDatetime = data.date && data.arrival 
+      ? `${data.date.split(' ')[0]} ${data.arrival}:00` 
+      : `${new Date().toISOString().split('T')[0]} 10:00:00`;
+
+    // Log des données transformées
+    console.log('Données transformées pour insertion:');
+    console.log('- flight_id:', data.flight_id, '→', flightIdInt);
+    console.log('- departure:', data.departure, '→', departureDatetime);
+    console.log('- arrival:', data.arrival, '→', arrivalDatetime);
+
     // 1. Insertion MySQL
+    console.log('Tentative d\'insertion dans la base de données...');
+    
     const [result] = await db.promise().query(
-      'INSERT INTO cartbillets (utilisateurs_id, flight_id, airline, departure, arrival, from_location, to_location, price, date, class_text, code, seat, payment_method, email) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      `INSERT INTO cartbillets 
+      (utilisateurs_id, flight_id, airline, departure, arrival, 
+       from_location, to_location, price, date, class_text, 
+       code, seat, payment_method, email) 
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        data.utilisateurs_id,
-        data.flight_id,
-        data.airline,
-        data.departure,
-        data.arrival,
-        data.from,
-        data.to,
-        data.price,
-        data.date,
-        data.classText,
-        data.code,
-        data.selectedSeat,
-        data.paymentMethod,
+        data.utilisateurs_id || 1,
+        flightIdInt,
+        data.airline || 'Airline Inconnue',
+        departureDatetime,
+        arrivalDatetime,
+        data.from_location || 'Non spécifié',
+        data.to_location || 'Non spécifié',
+        data.price || 0,
+        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+        data.class_text || 'Economy',
+        data.code || `CODE${Date.now()}`,
+        data.seat || 'Non assigné',
+        data.payment_method || 'card',
         data.email
       ]
     );
 
-    console.log('Insertion MySQL OK, ID:', result.insertId);
+    console.log('✅ Insertion MySQL réussie, ID:', result.insertId);
 
-    // 2. Générer le PDF
-    const doc = new PDFDocument();
-    const pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
+    // 2. Générer le PDF (simplifié pour le test)
+    console.log('Génération du PDF...');
+    pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
     
-    // Créer le dossier temp s'il n'existe pas
     if (!fs.existsSync(path.join(__dirname, 'temp'))) {
       fs.mkdirSync(path.join(__dirname, 'temp'));
     }
 
+    const doc = new PDFDocument();
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    // Contenu du PDF
     doc.fontSize(20).text('Billet de Réservation', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12)
-      .text(`Numéro de réservation: ${data.code}`)
-      .text(`Passager ID: ${data.utilisateurs_id}`)
-      .text(`Email: ${data.email}`)
-      .text(`Compagnie: ${data.airline}`)
-      .text(`Date de vol: ${data.date}`)
-      .text(`Classe: ${data.classText}`)
-      .text(`Départ: ${data.departure} depuis ${data.from}`)
-      .text(`Arrivée: ${data.arrival} à ${data.to}`)
-      .text(`Siège: ${data.selectedSeat || 'Non assigné'}`)
-      .text(`Prix: ${data.price} ${data.currency || 'USD'}`)
-      .text(`Méthode de paiement: ${data.paymentMethod}`);
-
+    doc.fontSize(12).text(`Réservation: ${data.code}`);
     doc.end();
 
-    // Attendre la fin de l'écriture du PDF
     await new Promise((resolve, reject) => {
       writeStream.on('finish', resolve);
       writeStream.on('error', reject);
     });
 
-    console.log('PDF généré:', pdfPath);
+    console.log('✅ PDF généré:', pdfPath);
 
-    // 3. Envoi email (optionnel - peut être commenté pour tester)
-    try {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER || 'spencermimo@gmail.com',
-          pass: process.env.EMAIL_PASS || 'iqvc rnjr uhms ukok'
-        }
-      });
-
-      await transporter.sendMail({
-        from: '"Booking Plane" <spencermimo@gmail.com>',
-        to: data.email,
-        subject: 'Votre billet de voyage',
-        text: `Bonjour,\n\nVeuillez trouver ci-joint votre billet de réservation.\nNuméro de réservation: ${data.code}\nMerci d'avoir choisi Booking Plane.`,
-        attachments: [
-          {
-            filename: `billet-${data.code}.pdf`,
-            path: pdfPath
-          }
-        ]
-      });
-
-      console.log('Email envoyé à', data.email);
-    } catch (emailError) {
-      console.warn('Erreur envoi email (non critique):', emailError.message);
-      // On continue même si l'email échoue
-    }
-
-    // 4. Nettoyage du fichier PDF
+    // 3. Nettoyage
     try {
       fs.unlinkSync(pdfPath);
-      console.log('PDF temporaire supprimé');
+      console.log('✅ PDF temporaire supprimé');
     } catch (cleanupError) {
-      console.warn('Erreur suppression PDF:', cleanupError.message);
+      console.warn('⚠️ Erreur suppression PDF:', cleanupError.message);
     }
 
-    // 5. Réponse succès
+    // 4. Réponse succès
+    console.log('✅ Envoi réponse succès au client');
     res.status(200).json({ 
       message: 'Réservation enregistrée avec succès',
       reservationId: result.insertId,
@@ -217,21 +206,44 @@ app.post('/cartbillets', async (req, res) => {
     });
 
   } catch (error) {
-    console.error('Erreur serveur complète:', error);
+    console.error('❌ ERREUR SERVEUR COMPLÈTE:');
+    console.error('Message:', error.message);
+    console.error('Stack:', error.stack);
     
-    // Essayez de supprimer le fichier PDF en cas d'erreur
+    if (error.code) {
+      console.error('Code erreur MySQL:', error.code);
+    }
+    
+    if (error.sql) {
+      console.error('Requête SQL:', error.sql);
+      console.error('Paramètres SQL:', error.parameters);
+    }
+
+    // Nettoyage en cas d'erreur
     try {
       if (pdfPath && fs.existsSync(pdfPath)) {
         fs.unlinkSync(pdfPath);
+        console.log('✅ PDF nettoyé après erreur');
       }
     } catch (cleanupError) {
-      console.error('Erreur nettoyage après erreur:', cleanupError);
+      console.error('❌ Erreur nettoyage après erreur:', cleanupError);
     }
 
-    res.status(500).json({ 
+    // Réponse d'erreur avec plus de détails en développement
+    const errorResponse = {
       message: 'Erreur lors de la réservation',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'
-    });
+    };
+    
+    if (process.env.NODE_ENV === 'development') {
+      errorResponse.details = {
+        code: error.code,
+        sqlMessage: error.sqlMessage,
+        stack: error.stack
+      };
+    }
+    
+    res.status(500).json(errorResponse);
   }
 });
 

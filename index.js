@@ -207,61 +207,73 @@ app.post('/cartbillets', async (req, res) => {
     console.log('✅ PDF généré:', pdfPath);
 
     // 3. Envoi de l'email avec le PDF
-    try {
-      const transporter = nodemailer.createTransport({
-        service: 'gmail',
-        auth: {
-          user: process.env.EMAIL_USER,
-          pass: process.env.EMAIL_PASS
-        }
-      });
+    // 🔧 REMPLACEZ la partie email par ce code :
+try {
+  console.log('📧 Tentative d\'envoi d\'email à:', data.email);
+  
+  const transporter = nodemailer.createTransport({
+    service: 'gmail',
+    auth: {
+      user: process.env.EMAIL_USER,
+      pass: process.env.EMAIL_PASS
+    },
+    // Options supplémentaires importantes
+    tls: {
+      rejectUnauthorized: false
+    },
+    connectionTimeout: 10000,
+    socketTimeout: 10000
+  });
 
-      const mailOptions = {
-        from: process.env.EMAIL_USER,
-        to: data.email,
-        subject: 'Votre billet de voyage BookInPlane',
-        html: `
-          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-            <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
-            <p>Bonjour,</p>
-            <p>Votre réservation a été confirmée avec succès. Voici le détail de votre vol :</p>
-            
-            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-              <p><strong>Numéro de réservation:</strong> ${data.code}</p>
-              <p><strong>Compagnie:</strong> ${data.airline || 'Non spécifié'}</p>
-              <p><strong>Trajet:</strong> ${data.from_location} → ${data.to_location}</p>
-              <p><strong>Départ:</strong> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</p>
-              <p><strong>Arrivée:</strong> ${data.arrival}</p>
-              <p><strong>Classe:</strong> ${data.class_text || 'Economy'}</p>
-              <p><strong>Siège:</strong> ${data.seat || 'Non assigné'}</p>
-              <p><strong>Prix:</strong> ${data.price || 0} ${data.currency || 'USD'}</p>
-            </div>
+  // Vérifier la connexion au service email
+  await transporter.verify();
+  console.log('✅ Serveur email configuré avec succès');
 
-            <p>Veuillez trouver ci-joint votre billet électronique au format PDF.</p>
-            <p>Merci d'avoir choisi BookInPlane !</p>
-            
-            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
-            <p style="color: #666; font-size: 12px;">
-              Cet email a été envoyé automatiquement. Merci de ne pas y répondre.
-            </p>
-          </div>
-        `,
-        attachments: [
-          {
-            filename: `billet-${data.code}.pdf`,
-            path: pdfPath,
-            contentType: 'application/pdf'
-          }
-        ]
-      };
+  const mailOptions = {
+    from: `"BookInPlane" <${process.env.EMAIL_USER}>`,
+    to: data.email,
+    subject: 'Votre billet de voyage BookInPlane',
+    html: `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+        <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
+        <p>Bonjour,</p>
+        <p>Votre réservation a été confirmée avec succès. Voici le détail de votre vol :</p>
+        
+        <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+          <p><strong>Numéro de réservation:</strong> ${data.code}</p>
+          <p><strong>Compagnie:</strong> ${data.airline || 'Non spécifié'}</p>
+          <p><strong>Trajet:</strong> ${data.from_location} → ${data.to_location}</p>
+          <p><strong>Départ:</strong> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</p>
+          <p><strong>Arrivée:</strong> ${data.arrival}</p>
+          <p><strong>Classe:</strong> ${data.class_text || 'Economy'}</p>
+          <p><strong>Siège:</strong> ${data.seat || 'Non assigné'}</p>
+          <p><strong>Prix:</strong> ${data.price || 0} ${data.currency || 'USD'}</p>
+        </div>
 
-      await transporter.sendMail(mailOptions);
-      console.log('✅ Email envoyé avec succès à:', data.email);
-      
-    } catch (emailError) {
-      console.warn('⚠️ Email non envoyé:', emailError.message);
-      // Continuer même si l'email échoue - ce n'est pas critique
-    }
+        <p>Veuillez trouver ci-joint votre billet électronique au format PDF.</p>
+        <p>Merci d'avoir choisi BookInPlane !</p>
+      </div>
+    `,
+    attachments: [
+      {
+        filename: `billet-${data.code}.pdf`,
+        path: pdfPath,
+        contentType: 'application/pdf'
+      }
+    ]
+  };
+
+  const info = await transporter.sendMail(mailOptions);
+  console.log('✅ Email envoyé avec succès! Message ID:', info.messageId);
+  
+} catch (emailError) {
+  console.error('❌ Échec envoi email:', emailError.message);
+  console.error('Détails erreur:', emailError);
+  
+  // Ajouter cette information dans la réponse
+  emailErrorOccurred = true;
+  emailErrorDetails = emailError.message;
+}
 
     // 4. Nettoyage du fichier PDF
     try {

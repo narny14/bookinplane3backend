@@ -165,10 +165,11 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log('✅ Insertion MySQL réussie, ID:', result.insertId);
 
-    // 2. Générer le PDF (simplifié pour le test)
+    // 2. Générer le PDF
     console.log('Génération du PDF...');
     pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
     
+    // Créer le dossier temp s'il n'existe pas
     if (!fs.existsSync(path.join(__dirname, 'temp'))) {
       fs.mkdirSync(path.join(__dirname, 'temp'));
     }
@@ -177,11 +178,27 @@ app.post('/cartbillets', async (req, res) => {
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    doc.fontSize(20).text('Billet de Réservation', { align: 'center' });
+    // Contenu du PDF plus détaillé
+    doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12).text(`Réservation: ${data.code}`);
+    doc.fontSize(12)
+      .text(`Numéro de réservation: ${data.code}`)
+      .text(`Compagnie aérienne: ${data.airline || 'Non spécifié'}`)
+      .text(`Départ: ${data.from_location} à ${data.departure}`)
+      .text(`Arrivée: ${data.to_location} à ${data.arrival}`)
+      .text(`Date: ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}`)
+      .text(`Classe: ${data.class_text || 'Economy'}`)
+      .text(`Siège: ${data.seat || 'Non assigné'}`)
+      .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
+      .text(`Passager: ${data.email}`)
+      .text(`Méthode de paiement: ${data.payment_method || 'Carte'}`);
+    
+    doc.moveDown();
+    doc.text('Merci d\'avoir choisi BookInPlane !', { align: 'center' });
+
     doc.end();
 
+    // Attendre la fin de l'écriture du PDF
     await new Promise((resolve, reject) => {
       writeStream.on('finish', resolve);
       writeStream.on('error', reject);
@@ -189,7 +206,64 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log('✅ PDF généré:', pdfPath);
 
-    // 3. Nettoyage
+    // 3. Envoi de l'email avec le PDF
+    try {
+      const transporter = nodemailer.createTransport({
+        service: 'gmail',
+        auth: {
+          user: process.env.EMAIL_USER,
+          pass: process.env.EMAIL_PASS
+        }
+      });
+
+      const mailOptions = {
+        from: process.env.EMAIL_USER,
+        to: data.email,
+        subject: 'Votre billet de voyage BookInPlane',
+        html: `
+          <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
+            <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
+            <p>Bonjour,</p>
+            <p>Votre réservation a été confirmée avec succès. Voici le détail de votre vol :</p>
+            
+            <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
+              <p><strong>Numéro de réservation:</strong> ${data.code}</p>
+              <p><strong>Compagnie:</strong> ${data.airline || 'Non spécifié'}</p>
+              <p><strong>Trajet:</strong> ${data.from_location} → ${data.to_location}</p>
+              <p><strong>Départ:</strong> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</p>
+              <p><strong>Arrivée:</strong> ${data.arrival}</p>
+              <p><strong>Classe:</strong> ${data.class_text || 'Economy'}</p>
+              <p><strong>Siège:</strong> ${data.seat || 'Non assigné'}</p>
+              <p><strong>Prix:</strong> ${data.price || 0} ${data.currency || 'USD'}</p>
+            </div>
+
+            <p>Veuillez trouver ci-joint votre billet électronique au format PDF.</p>
+            <p>Merci d'avoir choisi BookInPlane !</p>
+            
+            <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;">
+            <p style="color: #666; font-size: 12px;">
+              Cet email a été envoyé automatiquement. Merci de ne pas y répondre.
+            </p>
+          </div>
+        `,
+        attachments: [
+          {
+            filename: `billet-${data.code}.pdf`,
+            path: pdfPath,
+            contentType: 'application/pdf'
+          }
+        ]
+      };
+
+      await transporter.sendMail(mailOptions);
+      console.log('✅ Email envoyé avec succès à:', data.email);
+      
+    } catch (emailError) {
+      console.warn('⚠️ Email non envoyé:', emailError.message);
+      // Continuer même si l'email échoue - ce n'est pas critique
+    }
+
+    // 4. Nettoyage du fichier PDF
     try {
       fs.unlinkSync(pdfPath);
       console.log('✅ PDF temporaire supprimé');
@@ -197,12 +271,13 @@ app.post('/cartbillets', async (req, res) => {
       console.warn('⚠️ Erreur suppression PDF:', cleanupError.message);
     }
 
-    // 4. Réponse succès
+    // 5. Réponse succès
     console.log('✅ Envoi réponse succès au client');
     res.status(200).json({ 
       message: 'Réservation enregistrée avec succès',
       reservationId: result.insertId,
-      code: data.code
+      code: data.code,
+      emailSent: true
     });
 
   } catch (error) {
@@ -229,7 +304,7 @@ app.post('/cartbillets', async (req, res) => {
       console.error('❌ Erreur nettoyage après erreur:', cleanupError);
     }
 
-    // Réponse d'erreur avec plus de détails en développement
+    // Réponse d'erreur avec plus de détails
     const errorResponse = {
       message: 'Erreur lors de la réservation',
       error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'

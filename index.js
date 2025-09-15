@@ -207,51 +207,41 @@ app.post('/cartbillets', async (req, res) => {
     console.log('✅ PDF généré:', pdfPath);
 
     // 3. Envoi de l'email avec le PDF
-    // 🔧 REMPLACEZ la partie email par ce code :
 try {
   console.log('📧 Tentative d\'envoi d\'email à:', data.email);
-  
-  const transporter = nodemailer.createTransport({
-  host: process.env.SMTP_HOST || 'smtp.gmail.com',
-  port: parseInt(process.env.SMTP_PORT) || 587,
-  secure: false,
-  auth: {
-    user: process.env.SMTP_USER || 'spencermimo@gmail.com',
-    pass: process.env.SMTP_PASS || 'iqvc rnjr uhms ukok'
-  },
-  tls: {
-    rejectUnauthorized: false
-  }
-});
 
-  // Vérifier la connexion au service email
+  const transporter = nodemailer.createTransport({
+    service: 'gmail', // <-- plus simple et adapté à Gmail
+    auth: {
+      user: process.env.SMTP_USER || 'spencermimo@gmail.com',
+      pass: process.env.SMTP_PASS || 'iqvc rnjr uhms ukok' // mot de passe application
+    }
+  });
+
+  // Vérification connexion SMTP
   await transporter.verify();
-  console.log('✅ Serveur email configuré avec succès');
+  console.log('✅ Serveur email Gmail prêt');
 
   const mailOptions = {
-    from: `"BookInPlane" <${process.env.EMAIL_USER}>`,
+    from: `"BookInPlane" <${process.env.SMTP_USER || 'spencermimo@gmail.com'}>`, // <-- corrige ICI
     to: data.email,
     subject: 'Votre billet de voyage BookInPlane',
     html: `
-      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-        <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
-        <p>Bonjour,</p>
-        <p>Votre réservation a été confirmée avec succès. Voici le détail de votre vol :</p>
-        
-        <div style="background: #f9f9f9; padding: 15px; border-radius: 5px; margin: 20px 0;">
-          <p><strong>Numéro de réservation:</strong> ${data.code}</p>
-          <p><strong>Compagnie:</strong> ${data.airline || 'Non spécifié'}</p>
-          <p><strong>Trajet:</strong> ${data.from_location} → ${data.to_location}</p>
-          <p><strong>Départ:</strong> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</p>
-          <p><strong>Arrivée:</strong> ${data.arrival}</p>
-          <p><strong>Classe:</strong> ${data.class_text || 'Economy'}</p>
-          <p><strong>Siège:</strong> ${data.seat || 'Non assigné'}</p>
-          <p><strong>Prix:</strong> ${data.price || 0} ${data.currency || 'USD'}</p>
-        </div>
-
-        <p>Veuillez trouver ci-joint votre billet électronique au format PDF.</p>
-        <p>Merci d'avoir choisi BookInPlane !</p>
-      </div>
+      <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
+      <p>Bonjour,</p>
+      <p>Votre réservation a été confirmée avec succès :</p>
+      <ul>
+        <li><b>Numéro:</b> ${data.code}</li>
+        <li><b>Compagnie:</b> ${data.airline || 'Non spécifié'}</li>
+        <li><b>Trajet:</b> ${data.from_location} → ${data.to_location}</li>
+        <li><b>Départ:</b> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</li>
+        <li><b>Arrivée:</b> ${data.arrival}</li>
+        <li><b>Classe:</b> ${data.class_text || 'Economy'}</li>
+        <li><b>Siège:</b> ${data.seat || 'Non assigné'}</li>
+        <li><b>Prix:</b> ${data.price || 0} ${data.currency || 'USD'}</li>
+      </ul>
+      <p>Votre billet est en pièce jointe (PDF).</p>
+      <p>Merci d'avoir choisi BookInPlane !</p>
     `,
     attachments: [
       {
@@ -264,15 +254,12 @@ try {
 
   const info = await transporter.sendMail(mailOptions);
   console.log('✅ Email envoyé avec succès! Message ID:', info.messageId);
-  
+
 } catch (emailError) {
   console.error('❌ Échec envoi email:', emailError.message);
   console.error('Détails erreur:', emailError);
-  
-  // Ajouter cette information dans la réponse
-  emailErrorOccurred = true;
-  emailErrorDetails = emailError.message;
 }
+
 
     // 4. Nettoyage du fichier PDF
     try {

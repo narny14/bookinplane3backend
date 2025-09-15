@@ -214,7 +214,7 @@ try {
     service: 'gmail', // <-- plus simple et adapté à Gmail
     auth: {
       user: process.env.SMTP_USER || 'spencermimo@gmail.com',
-      pass: process.env.SMTP_PASS || 'iqvc rnjr uhms ukok' // mot de passe application
+      pass: process.env.SMTP_PASS || 'iyoc hklp smdq ilhw' // mot de passe application
     }
   });
 

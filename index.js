@@ -212,18 +212,17 @@ try {
   console.log('📧 Tentative d\'envoi d\'email à:', data.email);
   
   const transporter = nodemailer.createTransport({
-    service: 'gmail',
-    auth: {
-      user: process.env.EMAIL_USER,
-      pass: process.env.EMAIL_PASS
-    },
-    // Options supplémentaires importantes
-    tls: {
-      rejectUnauthorized: false
-    },
-    connectionTimeout: 10000,
-    socketTimeout: 10000
-  });
+  host: process.env.SMTP_HOST || 'smtp.gmail.com',
+  port: parseInt(process.env.SMTP_PORT) || 587,
+  secure: false,
+  auth: {
+    user: process.env.SMTP_USER || 'spencermimo@gmail.com',
+    pass: process.env.SMTP_PASS || 'iqvc rnjr uhms ukok'
+  },
+  tls: {
+    rejectUnauthorized: false
+  }
+});
 
   // Vérifier la connexion au service email
   await transporter.verify();

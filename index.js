@@ -108,20 +108,16 @@ app.post('/cartbillets', async (req, res) => {
   let pdfPath = null;
 
   try {
-    // Vérification basique des champs
+    // Vérif email obligatoire
     if (!data.email) {
-      console.error('❌ Erreur: email manquant');
       return res.status(400).json({ message: 'Email manquant' });
     }
 
-    // 🔹 CONVERSION DES TYPES POUR RAILWAY
+    // 🔹 Conversion du flight_id
     let flightIdInt = parseInt(data.flight_id);
-    if (isNaN(flightIdInt)) {
-      console.warn('⚠️ flight_id n\'est pas un nombre, utilisation de valeur par défaut');
-      flightIdInt = 9999;
-    }
+    if (isNaN(flightIdInt)) flightIdInt = 9999;
 
-    // Convertir les heures en datetime pour MySQL
+    // 🔹 Conversion heures
     const departureDatetime = data.date && data.departure 
       ? `${data.date.split(' ')[0]} ${data.departure}:00` 
       : `${new Date().toISOString().split('T')[0]} 08:00:00`;
@@ -130,75 +126,109 @@ app.post('/cartbillets', async (req, res) => {
       ? `${data.date.split(' ')[0]} ${data.arrival}:00` 
       : `${new Date().toISOString().split('T')[0]} 10:00:00`;
 
-    // Log des données transformées
-    console.log('Données transformées pour insertion:');
-    console.log('- flight_id:', data.flight_id, '→', flightIdInt);
-    console.log('- departure:', data.departure, '→', departureDatetime);
-    console.log('- arrival:', data.arrival, '→', arrivalDatetime);
+    // ========================================================
+    // 1️⃣ Gestion UTILISATEUR
+    // ========================================================
+    let [userRows] = await db.promise().query(
+      "SELECT id, nom, prenom, telephone FROM utilisateurs WHERE email = ?",
+      [data.email]
+    );
 
-    // 1. Insertion MySQL
-    console.log('Tentative d\'insertion dans la base de données...');
-    
-    const [result] = await db.promise().query(
-      `INSERT INTO cartbillets 
-      (utilisateurs_id, flight_id, airline, departure, arrival, 
-       from_location, to_location, price, date, class_text, 
-       code, seat, payment_method, email) 
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    let utilisateurId;
+    if (userRows.length > 0) {
+      const existingUser = userRows[0];
+      if (
+        existingUser.nom === (data.nom || '') &&
+        existingUser.prenom === (data.prenom || '') &&
+        existingUser.telephone === (data.telephone || '')
+      ) {
+        utilisateurId = existingUser.id;
+        console.log("👤 Utilisateur existant réutilisé ID:", utilisateurId);
+      } else {
+        // ⚠️ Si les infos diffèrent → mise à jour
+        await db.promise().query(
+          "UPDATE utilisateurs SET nom=?, prenom=?, telephone=? WHERE id=?",
+          [data.nom || '', data.prenom || '', data.telephone || '', existingUser.id]
+        );
+        utilisateurId = existingUser.id;
+        console.log("♻️ Utilisateur mis à jour ID:", utilisateurId);
+      }
+    } else {
+      const [userResult] = await db.promise().query(
+        `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription)
+         VALUES (?, ?, ?, ?, NOW())`,
+        [data.nom || '', data.prenom || '', data.telephone || '', data.email]
+      );
+      utilisateurId = userResult.insertId;
+      console.log("✅ Nouvel utilisateur créé ID:", utilisateurId);
+    }
+
+    // ========================================================
+    // 2️⃣ Insertion dans RESERVATIONS
+    // ========================================================
+    const [resResult] = await db.promise().query(
+      `INSERT INTO reservations 
+      (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+       nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+       place_selectionnee, airline_id, class_text, code_vol, 
+       heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol)
+      VALUES (?, ?, ?, ?, NOW(),
+        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       [
-        data.utilisateurs_id || 1,
+        utilisateurId,
         flightIdInt,
-        data.airline || 'Airline Inconnue',
-        departureDatetime,
-        arrivalDatetime,
-        data.from_location || 'Non spécifié',
-        data.to_location || 'Non spécifié',
-        data.price || 0,
-        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+        data.classe_id || 1,
+        data.statut || 'Réservé',
+        data.nom || '',
+        data.email,
+        data.adresse || '',
+        data.ville || '',
+        data.date_naissance || null,
+        data.pays || '',
+        data.passeport || '',
+        data.expiration_passeport || null,
+        data.seat || '',
+        data.airline_id || 0,
         data.class_text || 'Economy',
         data.code || `CODE${Date.now()}`,
-        data.seat || 'Non assigné',
-        data.payment_method || 'card',
-        data.email
+        data.departure || '08:00:00',
+        data.arrival || '10:00:00',
+        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+        data.from_location || '',
+        data.to_location || '',
+        data.duree_vol || null
       ]
     );
 
-    console.log('✅ Insertion MySQL réussie, ID:', result.insertId);
+    console.log('✅ Réservation insérée ID:', resResult.insertId);
 
-    // 2. Générer le PDF
-    console.log('Génération du PDF...');
+    // ========================================================
+    // 3️⃣ Génération du PDF billet
+    // ========================================================
     pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
-    
-    // Créer le dossier temp s'il n'existe pas
-    if (!fs.existsSync(path.join(__dirname, 'temp'))) {
-      fs.mkdirSync(path.join(__dirname, 'temp'));
-    }
+    if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
 
     const doc = new PDFDocument();
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    // Contenu du PDF plus détaillé
     doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
     doc.moveDown();
     doc.fontSize(12)
       .text(`Numéro de réservation: ${data.code}`)
       .text(`Compagnie aérienne: ${data.airline || 'Non spécifié'}`)
-      .text(`Départ: ${data.from_location} à ${data.departure}`)
-      .text(`Arrivée: ${data.to_location} à ${data.arrival}`)
-      .text(`Date: ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}`)
+      .text(`Trajet: ${data.from_location} → ${data.to_location}`)
+      .text(`Départ: ${data.departure} le ${data.date || ''}`)
+      .text(`Arrivée: ${data.arrival}`)
       .text(`Classe: ${data.class_text || 'Economy'}`)
       .text(`Siège: ${data.seat || 'Non assigné'}`)
       .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
-      .text(`Passager: ${data.email}`)
+      .text(`Passager: ${data.nom || ''} (${data.email})`)
       .text(`Méthode de paiement: ${data.payment_method || 'Carte'}`);
-    
     doc.moveDown();
     doc.text('Merci d\'avoir choisi BookInPlane !', { align: 'center' });
 
     doc.end();
-
-    // Attendre la fin de l'écriture du PDF
     await new Promise((resolve, reject) => {
       writeStream.on('finish', resolve);
       writeStream.on('error', reject);
@@ -206,117 +236,68 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log('✅ PDF généré:', pdfPath);
 
-    // 3. Envoi de l'email avec le PDF
-try {
-  console.log('📧 Tentative d\'envoi d\'email à:', data.email);
+    // ========================================================
+    // 4️⃣ Envoi Email
+    // ========================================================
+    try {
+      const transporter = nodemailer.createTransport({
+        host: "smtp.gmail.com",
+        port: 465,
+        secure: true,
+        auth: {
+          user: process.env.SMTP_USER || 'spencermimo@gmail.com',
+          pass: process.env.SMTP_PASS || 'ton_mot_de_passe_app'
+        }
+      });
 
-  const transporter = nodemailer.createTransport({
-    service: 'gmail', // <-- plus simple et adapté à Gmail
-    auth: {
-      user: process.env.SMTP_USER || 'spencermimo@gmail.com',
-      pass: process.env.SMTP_PASS || 'iyoc hklp smdq ilhw' // mot de passe application
+      await transporter.verify();
+      console.log("✅ SMTP Gmail prêt");
+
+      const info = await transporter.sendMail({
+        from: `"BookInPlane" <${process.env.SMTP_USER || 'spencermimo@gmail.com'}>`,
+        to: data.email,
+        subject: "Votre billet de voyage BookInPlane",
+        html: `
+          <h2>Confirmation de votre réservation</h2>
+          <p>Bonjour ${data.nom || ''},</p>
+          <p>Votre réservation est confirmée :</p>
+          <ul>
+            <li><b>Numéro:</b> ${data.code}</li>
+            <li><b>Compagnie:</b> ${data.airline}</li>
+            <li><b>Trajet:</b> ${data.from_location} → ${data.to_location}</li>
+            <li><b>Départ:</b> ${data.departure} le ${data.date}</li>
+            <li><b>Classe:</b> ${data.class_text}</li>
+            <li><b>Prix:</b> ${data.price} ${data.currency || 'USD'}</li>
+          </ul>
+          <p>Votre billet est en pièce jointe.</p>
+        `,
+        attachments: [
+          { filename: `billet-${data.code}.pdf`, path: pdfPath }
+        ]
+      });
+
+      console.log("✅ Email envoyé ID:", info.messageId);
+    } catch (emailErr) {
+      console.error("❌ Erreur email:", emailErr.message);
     }
-  });
 
-  // Vérification connexion SMTP
-  await transporter.verify();
-  console.log('✅ Serveur email Gmail prêt');
-
-  const mailOptions = {
-    from: `"BookInPlane" <${process.env.SMTP_USER || 'spencermimo@gmail.com'}>`, // <-- corrige ICI
-    to: data.email,
-    subject: 'Votre billet de voyage BookInPlane',
-    html: `
-      <h2 style="color: #D2212E;">Confirmation de votre réservation</h2>
-      <p>Bonjour,</p>
-      <p>Votre réservation a été confirmée avec succès :</p>
-      <ul>
-        <li><b>Numéro:</b> ${data.code}</li>
-        <li><b>Compagnie:</b> ${data.airline || 'Non spécifié'}</li>
-        <li><b>Trajet:</b> ${data.from_location} → ${data.to_location}</li>
-        <li><b>Départ:</b> ${data.departure} le ${data.date ? data.date.split(' ')[0] : 'Non spécifié'}</li>
-        <li><b>Arrivée:</b> ${data.arrival}</li>
-        <li><b>Classe:</b> ${data.class_text || 'Economy'}</li>
-        <li><b>Siège:</b> ${data.seat || 'Non assigné'}</li>
-        <li><b>Prix:</b> ${data.price || 0} ${data.currency || 'USD'}</li>
-      </ul>
-      <p>Votre billet est en pièce jointe (PDF).</p>
-      <p>Merci d'avoir choisi BookInPlane !</p>
-    `,
-    attachments: [
-      {
-        filename: `billet-${data.code}.pdf`,
-        path: pdfPath,
-        contentType: 'application/pdf'
-      }
-    ]
-  };
-
-  const info = await transporter.sendMail(mailOptions);
-  console.log('✅ Email envoyé avec succès! Message ID:', info.messageId);
-
-} catch (emailError) {
-  console.error('❌ Échec envoi email:', emailError.message);
-  console.error('Détails erreur:', emailError);
-}
-
-
-    // 4. Nettoyage du fichier PDF
+    // Nettoyage PDF
     try {
       fs.unlinkSync(pdfPath);
-      console.log('✅ PDF temporaire supprimé');
-    } catch (cleanupError) {
-      console.warn('⚠️ Erreur suppression PDF:', cleanupError.message);
-    }
+    } catch {}
 
-    // 5. Réponse succès
-    console.log('✅ Envoi réponse succès au client');
-    res.status(200).json({ 
-      message: 'Réservation enregistrée avec succès',
-      reservationId: result.insertId,
-      code: data.code,
-      emailSent: true
+    // Réponse finale
+    res.status(200).json({
+      message: "Réservation enregistrée et email envoyé",
+      utilisateurId,
+      reservationId: resResult.insertId,
+      code: data.code
     });
 
-  } catch (error) {
-    console.error('❌ ERREUR SERVEUR COMPLÈTE:');
-    console.error('Message:', error.message);
-    console.error('Stack:', error.stack);
-    
-    if (error.code) {
-      console.error('Code erreur MySQL:', error.code);
-    }
-    
-    if (error.sql) {
-      console.error('Requête SQL:', error.sql);
-      console.error('Paramètres SQL:', error.parameters);
-    }
-
-    // Nettoyage en cas d'erreur
-    try {
-      if (pdfPath && fs.existsSync(pdfPath)) {
-        fs.unlinkSync(pdfPath);
-        console.log('✅ PDF nettoyé après erreur');
-      }
-    } catch (cleanupError) {
-      console.error('❌ Erreur nettoyage après erreur:', cleanupError);
-    }
-
-    // Réponse d'erreur avec plus de détails
-    const errorResponse = {
-      message: 'Erreur lors de la réservation',
-      error: process.env.NODE_ENV === 'development' ? error.message : 'Erreur interne'
-    };
-    
-    if (process.env.NODE_ENV === 'development') {
-      errorResponse.details = {
-        code: error.code,
-        sqlMessage: error.sqlMessage,
-        stack: error.stack
-      };
-    }
-    
-    res.status(500).json(errorResponse);
+  } catch (err) {
+    console.error("❌ Erreur:", err.message);
+    if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+    res.status(500).json({ message: "Erreur serveur", error: err.message });
   }
 });
 

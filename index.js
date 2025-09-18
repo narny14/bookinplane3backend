@@ -234,81 +234,180 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
     // ========================================================
     // 3️⃣ Génération du PDF billet
     // ========================================================
-    pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
-    if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
+    // ========================================================
+// 3️⃣ Génération du PDF billet (OneWay / RoundTrip / MultiCity)
+// ========================================================
+pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
+if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
 
-    const doc = new PDFDocument();
-    const writeStream = fs.createWriteStream(pdfPath);
-    doc.pipe(writeStream);
+const doc = new PDFDocument();
+const writeStream = fs.createWriteStream(pdfPath);
+doc.pipe(writeStream);
 
-    doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
+doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
+doc.moveDown();
+
+// Header infos principales
+doc.fontSize(12)
+  .text(`Numéro de réservation: ${data.code}`)
+  .text(`Passager: ${data.nom || ''} (${data.email})`)
+  .text(`Classe: ${data.class_text || 'Economy'}`)
+  .text(`Siège: ${data.seat || 'Non assigné'}`)
+  .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
+  .text(`Méthode de paiement: ${data.payment_method || 'Carte'}`);
+doc.moveDown();
+
+// 🔹 Selon le type de vol
+if (data.types_de_vol === "oneway") {
+  doc.fontSize(14).text("✈️ Trajet Aller (One Way)", { underline: true });
+  doc.fontSize(12)
+    .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
+    .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
+    .text(`Arrivée: ${data.to_location} à ${data.arrival}`)
+    .text(`Durée: ${data.duree_vol || 'Non précisé'}`);
+}
+
+else if (data.types_de_vol === "roundtrip") {
+  doc.fontSize(14).text("✈️ Trajet Aller", { underline: true });
+  doc.fontSize(12)
+    .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
+    .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
+    .text(`Arrivée: ${data.to_location} à ${data.arrival}`);
+  doc.moveDown();
+
+  doc.fontSize(14).text("✈️ Trajet Retour", { underline: true });
+  doc.fontSize(12)
+    .text(`Compagnie: ${data.airline_retour || data.airline || 'Non spécifié'}`)
+    .text(`Départ: ${data.to_location} le ${data.date_retour || ''} à ${data.departure_retour || ''}`)
+    .text(`Arrivée: ${data.from_location} à ${data.arrival_retour || ''}`);
+}
+
+else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+  doc.fontSize(14).text("✈️ Trajets Multi-City", { underline: true });
+  data.segments.forEach((seg, idx) => {
     doc.moveDown();
-    doc.fontSize(12)
-      .text(`Numéro de réservation: ${data.code}`)
-      .text(`Compagnie aérienne: ${data.airline || 'Non spécifié'}`)
-      .text(`Trajet: ${data.from_location} → ${data.to_location}`)
-      .text(`Départ: ${data.departure} le ${data.date || ''}`)
-      .text(`Arrivée: ${data.arrival}`)
-      .text(`Classe: ${data.class_text || 'Economy'}`)
-      .text(`Siège: ${data.seat || 'Non assigné'}`)
-      .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
-      .text(`Passager: ${data.nom || ''} (${data.email})`)
-      .text(`Méthode de paiement: ${data.payment_method || 'Carte'}`);
-    doc.moveDown();
-    doc.text('Merci d\'avoir choisi BookInPlane !', { align: 'center' });
+    doc.fontSize(12).text(`Segment ${idx + 1}`);
+    doc.text(`Compagnie: ${seg.airline || 'Non spécifié'}`)
+       .text(`Départ: ${seg.from} le ${seg.date} à ${seg.departure}`)
+       .text(`Arrivée: ${seg.to} à ${seg.arrival}`);
+  });
+}
 
-    doc.end();
-    await new Promise((resolve, reject) => {
-      writeStream.on('finish', resolve);
-      writeStream.on('error', reject);
-    });
+doc.moveDown();
+doc.text('Merci d\'avoir choisi BookInPlane !', { align: 'center' });
 
-    console.log('✅ PDF généré:', pdfPath);
+doc.end();
+await new Promise((resolve, reject) => {
+  writeStream.on('finish', resolve);
+  writeStream.on('error', reject);
+});
+
+console.log('✅ PDF généré:', pdfPath);
+
 
     // ========================================================
     // 4️⃣ Envoi Email
     // ========================================================
     try {
-      const transporter = nodemailer.createTransport({
-        host: "smtp.gmail.com",
-        port: 465,
-        secure: true,
-        auth: {
-          user: process.env.SMTP_USER || 'spencermimo@gmail.com',
-          pass: process.env.SMTP_PASS || 'ton_mot_de_passe_app'
-        }
-      });
-
-      await transporter.verify();
-      console.log("✅ SMTP Gmail prêt");
-
-      const info = await transporter.sendMail({
-        from: `"BookInPlane" <${process.env.SMTP_USER || 'spencermimo@gmail.com'}>`,
-        to: data.email,
-        subject: "Votre billet de voyage BookInPlane",
-        html: `
-          <h2>Confirmation de votre réservation</h2>
-          <p>Bonjour ${data.nom || ''},</p>
-          <p>Votre réservation est confirmée :</p>
-          <ul>
-            <li><b>Numéro:</b> ${data.code}</li>
-            <li><b>Compagnie:</b> ${data.airline}</li>
-            <li><b>Trajet:</b> ${data.from_location} → ${data.to_location}</li>
-            <li><b>Départ:</b> ${data.departure} le ${data.date}</li>
-            <li><b>Classe:</b> ${data.class_text}</li>
-            <li><b>Prix:</b> ${data.price} ${data.currency || 'USD'}</li>
-          </ul>
-          <p>Votre billet est en pièce jointe.</p>
-        `,
-        attachments: [
-          { filename: `billet-${data.code}.pdf`, path: pdfPath }
-        ]
-      });
-
-      console.log("✅ Email envoyé ID:", info.messageId);
-    } catch (emailErr) {
-      console.error("❌ Erreur email:", emailErr.message);
+  const transporter = nodemailer.createTransport({
+    host: "smtp.gmail.com",
+    port: 465,
+    secure: true,
+    auth: {
+      user: process.env.SMTP_USER || "spencermimo@gmail.com",
+      pass: process.env.SMTP_PASS || "ton_mot_de_passe_app"
     }
+  });
+
+  await transporter.verify();
+  console.log("✅ SMTP Gmail prêt");
+
+  // ===============================
+  // 1️⃣ Construction du corps email
+  // ===============================
+  let emailContent = `
+    <h2>Confirmation de votre réservation</h2>
+    <p>Bonjour ${data.nom || "Cher Passager"},</p>
+    <p>Votre réservation est confirmée :</p>
+    <ul>
+      <li><b>Numéro:</b> ${data.code}</li>
+      <li><b>Classe:</b> ${data.class_text}</li>
+      <li><b>Prix:</b> ${data.price} ${data.currency || "USD"}</li>
+    </ul>
+  `;
+
+  // 🔹 Cas 1 : One Way
+  if (data.types_de_vol === "oneway") {
+    emailContent += `
+      <h3>✈️ Vol Aller</h3>
+      <p>
+        Compagnie : ${data.airline}<br/>
+        Trajet : ${data.from_location} → ${data.to_location}<br/>
+        Départ : ${data.departure} le ${data.date}<br/>
+        Arrivée : ${data.arrival}<br/>
+        Durée : ${data.duree_vol}
+      </p>
+    `;
+  }
+
+  // 🔹 Cas 2 : Round Trip
+  else if (data.types_de_vol === "roundtrip") {
+    emailContent += `
+      <h3>✈️ Vol Aller</h3>
+      <p>
+        Compagnie : ${data.airline}<br/>
+        ${data.from_location} → ${data.to_location}<br/>
+        Départ : ${data.departure} le ${data.date}<br/>
+        Arrivée : ${data.arrival}
+      </p>
+
+      <h3>✈️ Vol Retour</h3>
+      <p>
+        Compagnie : ${data.airline_retour || data.airline}<br/>
+        ${data.to_location} → ${data.from_location}<br/>
+        Départ : ${data.departure_retour} le ${data.date_retour}<br/>
+        Arrivée : ${data.arrival_retour}
+      </p>
+    `;
+  }
+
+  // 🔹 Cas 3 : Multi-City
+  else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+    emailContent += `<h3>✈️ Itinéraire Multi-City</h3>`;
+    data.segments.forEach((seg, index) => {
+      emailContent += `
+        <p>
+          <b>Segment ${index + 1}</b><br/>
+          Compagnie : ${seg.airline}<br/>
+          ${seg.from} → ${seg.to}<br/>
+          Départ : ${seg.departure} le ${seg.date}<br/>
+          Arrivée : ${seg.arrival}
+        </p>
+      `;
+    });
+  }
+
+  emailContent += `<p>Votre billet est en pièce jointe.</p>`;
+
+  // ===============================
+  // 2️⃣ Envoi email
+  // ===============================
+  const info = await transporter.sendMail({
+    from: `"BookInPlane" <${process.env.SMTP_USER || "spencermimo@gmail.com"}>`,
+    to: data.email,
+    subject: "Votre billet de voyage BookInPlane",
+    html: emailContent,
+    attachments: [
+      { filename: `billet-${data.code}.pdf`, path: pdfPath }
+    ]
+  });
+
+  console.log("✅ Email envoyé ID:", info.messageId);
+
+} catch (err) {
+  console.error("❌ Erreur envoi email :", err);
+}
+
 
     // Nettoyage PDF
     try {

@@ -167,40 +167,69 @@ app.post('/cartbillets', async (req, res) => {
     // 2️⃣ Insertion dans RESERVATIONS
     // ========================================================
     const [resResult] = await db.promise().query(
-      `INSERT INTO reservations 
-      (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-       nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-       place_selectionnee, airline_id, class_text, code_vol, 
-       heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol)
-      VALUES (?, ?, ?, ?, NOW(),
-        ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [
-        utilisateurId,
-        flightIdInt,
-        data.classe_id || 1,
-        data.statut || 'Réservé',
-        data.nom || '',
-        data.email,
-        data.adresse || '',
-        data.ville || '',
-        data.date_naissance || null,
-        data.pays || '',
-        data.passeport || '',
-        data.expiration_passeport || null,
-        data.seat || '',
-        data.airline_id || 0,
-        data.class_text || 'Economy',
-        data.code || `CODE${Date.now()}`,
-        data.departure || '08:00:00',
-        data.arrival || '10:00:00',
-        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-        data.from_location || '',
-        data.to_location || '',
-        data.duree_vol || null
-      ]
-    );
+  `INSERT INTO reservations 
+  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+   place_selectionnee, airline_id, class_text, code_vol, 
+   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol)
+  VALUES (?, ?, ?, ?, NOW(),
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  [
+    utilisateurId,                          // utilisateur_id
+    flightIdInt,                            // vol_id
+    data.classe_id || 1,                    // classe_id
+    data.statut || 'Réservé',               // statut
+    data.nom || '',                         // nom
+    data.email,                             // email
+    data.adresse || '',                     // adresse
+    data.ville || '',                       // ville
+    data.date_naissance || null,            // date_naissance
+    data.pays || '',                        // pays
+    data.passeport || '',                   // passeport
+    data.expiration_passeport || null,      // expiration_passeport
+    data.seat || '',                        // place_selectionnee
+    data.airline_id || 0,                   // airline_id
+    data.class_text || 'Economy',           // class_text
+    data.code || `CODE${Date.now()}`,       // code_vol
+    data.departure || '08:00:00',           // heure_depart
+    data.arrival || '10:00:00',             // heure_arrivee
+    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],  // date_vol
+    data.from_location || '',               // aeroport_depart
+    data.to_location || '',                 // aeroport_arrivee
+    data.duree_vol || null                  // duree_vol
+  ]
+);
 
-    console.log('✅ Réservation insérée ID:', resResult.insertId);
+console.log('✅ Réservation insérée ID:', resResult.insertId);
+
+
+    const [cartResult] = await db.promise().query(
+  `INSERT INTO cartbillets 
+  (utilisateurs_id, flight_id, airline, departure, arrival, 
+   from_location, to_location, price, date, class_text, code, 
+   seat, payment_method, email, types_de_vol, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+  [
+    utilisateurId,
+    flightIdInt,
+    data.airline || '',
+    departureDatetime,
+    arrivalDatetime,
+    data.from_location || '',
+    data.to_location || '',
+    data.price || 0,
+    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+    data.class_text || 'Economy',
+    data.code || `CODE${Date.now()}`,
+    data.seat || '',
+    data.payment_method || 'Carte',
+    data.email,
+    data.types_de_vol || ''
+  ]
+);
+
+console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     // ========================================================
     // 3️⃣ Génération du PDF billet

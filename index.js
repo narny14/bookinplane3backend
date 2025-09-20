@@ -251,6 +251,7 @@ app.post('/cartbillets', async (req, res) => {
 
     // 4️⃣ Insertion dans cartbillets
     // 4️⃣ Insertion dans cartbillets - CORRIGÉE
+// 4️⃣ Insertion dans cartbillets - CORRECTION DÉFINITIVE
 const [cartResult] = await db.promise().query(
   `INSERT INTO cartbillets 
   (utilisateurs_id, flight_id, airline, departure, arrival, 
@@ -259,16 +260,16 @@ const [cartResult] = await db.promise().query(
   VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
   [
     utilisateurId,
-    parseInt(data.flight_id) || 9999,
+    null,  // ← REMPLACER flight_id PAR null
     data.airline || '',
-    data.departure || null,           // departure (DATETIME/TIME)
-    data.arrival || null,             // arrival (DATETIME/TIME)
+    data.departure || null,
+    data.arrival || null,
     data.from_location || '',
     data.to_location || '',
     data.price || 0,
-    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0], // ← DATE seulement!
+    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
     data.class_text || 'Economy',
-    data.code || `CODE${Date.now()}`,
+    data.code ? data.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}`,
     data.seat || '',
     data.payment_method || 'Carte',
     data.email,

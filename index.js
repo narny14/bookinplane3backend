@@ -30,6 +30,7 @@ db.connect(err => {
     console.log('✅ Connecté à Railway MySQL');
   }
 });
+console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, process.env.DB_USER);
 
 // ====================== ROUTES =======================
 
@@ -133,9 +134,29 @@ app.post('/cartbillets', async (req, res) => {
       utilisateurId = userResult.insertId;
     }
 
-    // 2️⃣ Fonction insertion réservation
+    // 2️⃣ Fonction insertion réservation - CORRIGÉE
     const insertReservation = async (seg, idx = 0, type = "oneway") => {
       const flightIdInt = parseInt(seg.flight_id) || 9999;
+
+      // CALCUL DE LA DURÉE DU VOL - CORRECTION
+      let dureeVol = "02:00:00"; // Valeur par défaut
+      
+      if (seg.departure && seg.arrival) {
+        try {
+          // Convertir les heures en objets Date pour calculer la différence
+          const [depHours, depMins] = seg.departure.split(':').map(Number);
+          const [arrHours, arrMins] = seg.arrival.split(':').map(Number);
+          
+          let totalMins = (arrHours * 60 + arrMins) - (depHours * 60 + depMins);
+          if (totalMins < 0) totalMins += 1440; // Si ça passe à minuit
+          
+          const hours = Math.floor(totalMins / 60);
+          const mins = totalMins % 60;
+          dureeVol = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
+        } catch (e) {
+          dureeVol = "02:00:00"; // Valeur par défaut en cas d'erreur
+        }
+      }
 
       const [resResult] = await db.promise().query(
         `INSERT INTO reservations 
@@ -168,7 +189,7 @@ app.post('/cartbillets', async (req, res) => {
           seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
           seg.from_location || seg.from || "N/A",
           seg.to_location || seg.to || "N/A",
-          seg.duree_vol || "Non précisé",
+          dureeVol, // ← CORRIGÉ : Utilise la durée calculée au lieu de "Non précisé"
           type
         ]
       );

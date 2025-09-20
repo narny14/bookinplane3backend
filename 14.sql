@@ -1,8 +1,3 @@
-UPDATE aeroports
-SET pays = 'RDC'
-WHERE pays = '' OR pays IS NULL;
-
-
 INSERT INTO classes_voyage (id, nom, description) VALUES
 (1, 'economy', 'Classe économique - Confort standard, sièges basiques, services essentiels, tarif le plus abordable'),
 (2, 'first', 'Classe première - Confort maximal, service premium, sièges larges et inclinables, repas gastronomiques'),

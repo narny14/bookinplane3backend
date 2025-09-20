@@ -1,0 +1,1 @@
+ALTER TABLE reservations MODIFY code_vol VARCHAR(100);

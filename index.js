@@ -159,40 +159,41 @@ app.post('/cartbillets', async (req, res) => {
       }
 
       const [resResult] = await db.promise().query(
-        `INSERT INTO reservations 
-        (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-         nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-         place_selectionnee, airline_id, class_text, code_vol, 
-         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
-        VALUES (?, ?, ?, ?, NOW(),
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          utilisateurId,
-          flightIdInt,
-          seg.classe_id || 1,
-          data.statut || 'Réservé',
-          data.nom || '',
-          data.email,
-          data.adresse || '',
-          data.ville || '',
-          data.date_naissance || null,
-          data.pays || '',
-          data.passeport || '',
-          data.expiration_passeport || null,
-          seg.seat || '',
-          seg.airline_id || 0,
-          seg.class_text || 'Economy',
-          seg.code || `CODE${Date.now()}_${idx}`,
-          seg.departure || "00:00:00",
-          seg.arrival || "00:00:00",
-          seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
-          seg.from_location || seg.from || "N/A",
-          seg.to_location || seg.to || "N/A",
-          dureeVol, // ← CORRIGÉ : Utilise la durée calculée au lieu de "Non précisé"
-          type
-        ]
-      );
+  `INSERT INTO reservations 
+  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+   place_selectionnee, airline_id, class_text, code_vol, 
+   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+  VALUES (?, ?, ?, ?, NOW(),
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+  `,
+  [
+    utilisateurId,
+    flightIdInt,
+    seg.classe_id || 1,
+    data.statut || 'Réservé',
+    data.nom || '',
+    data.email,
+    data.adresse || '',
+    data.ville || '',
+    data.date_naissance || null,
+    data.pays || '',
+    data.passeport || '',
+    data.expiration_passeport || null,
+    seg.seat || '',
+    seg.airline_id || 0,
+    seg.class_text || 'Economy',
+    // CORRECTION : Code court (max 20 caractères)
+    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}${idx}`,
+    seg.departure || "00:00:00",
+    seg.arrival || "00:00:00",
+    seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
+    seg.from_location || seg.from || "N/A",
+    seg.to_location || seg.to || "N/A",
+    dureeVol,
+    type
+  ]
+);
 
       return resResult.insertId;
     };

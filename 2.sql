@@ -124,7 +124,7 @@ CREATE TABLE reservations (
     place_selectionnee VARCHAR(10),
     airline_id INT,
     class_text VARCHAR(50),
-    code_vol VARCHAR(20),
+    code_vol VARCHAR(100),
     heure_depart TIME,
     heure_arrivee TIME,
     date_vol DATE,

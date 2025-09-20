@@ -5,13 +5,14 @@
                 "authProtocol": "default",
                 "enableSsl": "Disabled"
             },
+            "ssh": "Disabled",
             "previewLimit": 50,
-            "server": "yamabiko.proxy.rlwy.net",
-            "port": 41547,
+            "server": "trolley.proxy.rlwy.net",
+            "port": 17008,
             "driver": "MySQL",
-            "name": "railway",
-            "username": "root",
-            "database": "railway"
+            "name": "Railway DB",
+            "database": "railway",
+            "username": "root"
         }
     ]
 }

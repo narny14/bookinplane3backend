@@ -8,6 +8,34 @@ CREATE TABLE utilisateurs (
     PRIMARY KEY (id)
 );
 
+CREATE TABLE classes_voyage (
+    id INT NOT NULL,
+    nom VARCHAR(50),
+    description TEXT,
+    PRIMARY KEY (id)
+);
+
+
+CREATE TABLE avions (
+    id INT NOT NULL AUTO_INCREMENT,
+    numero_avion VARCHAR(20) UNIQUE,
+    modele VARCHAR(100),
+    capacite_total INT,
+    PRIMARY KEY (id)
+);
+
+CREATE TABLE aeroports (
+    id INT NOT NULL AUTO_INCREMENT,
+    nom VARCHAR(100),
+    code_iata VARCHAR(10),
+    ville VARCHAR(100),
+    pays VARCHAR(50),
+    latitude DECIMAL(10,8),
+    longitude DECIMAL(11,8),
+    PRIMARY KEY (id)
+);
+
+
 
 CREATE TABLE vols (
     id INT NOT NULL  AUTO_INCREMENT,
@@ -24,6 +52,14 @@ CREATE TABLE vols (
     FOREIGN KEY (arrivee_id) REFERENCES aeroports(id)
 );
 
+
+
+CREATE TABLE prix (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    prix_km_economy DECIMAL(10,2) NOT NULL,
+    prix_km_first_class DECIMAL(10,2) NOT NULL,
+    prix_km_vip DECIMAL(10,2) NOT NULL
+);
 
 CREATE TABLE tarifs_vol (
     id INT NOT NULL  AUTO_INCREMENT,
@@ -47,27 +83,6 @@ CREATE TABLE poids_bagages (
     FOREIGN KEY (reservation_id) REFERENCES reservations(id)
 );
 
-
-CREATE TABLE passagers (
-    id INT NOT NULL AUTO_INCREMENT,
-    reservation_id INT,
-    nom VARCHAR(100),
-    prenom VARCHAR(100),
-    date_naissance DATE,
-    passeport VARCHAR(50),
-    PRIMARY KEY (id),
-    FOREIGN KEY (reservation_id) REFERENCES reservations(id)
-);
-
-
-CREATE TABLE classes_voyage (
-    id INT NOT NULL,
-    nom VARCHAR(50),
-    description TEXT,
-    PRIMARY KEY (id)
-);
-
-
 CREATE TABLE cartbillets (
     id INT NOT NULL AUTO_INCREMENT,
     utilisateurs_id INT,
@@ -88,25 +103,6 @@ CREATE TABLE cartbillets (
     PRIMARY KEY (id),
     FOREIGN KEY (utilisateurs_id) REFERENCES utilisateurs(id),
     FOREIGN KEY (flight_id) REFERENCES vols(id)
-);
-
-
-CREATE TABLE avions (
-    id INT NOT NULL AUTO_INCREMENT,
-    numero_avion VARCHAR(20) UNIQUE,
-    modele VARCHAR(100),
-    capacite_total INT,
-    PRIMARY KEY (id)
-);
-
-
-CREATE TABLE aeroports (
-    id INT NOT NULL AUTO_INCREMENT,
-    nom VARCHAR(100),
-    code_iata VARCHAR(10),
-    ville VARCHAR(100),
-    pays VARCHAR(50),
-    PRIMARY KEY (id)
 );
 
 
@@ -139,10 +135,16 @@ CREATE TABLE reservations (
 );
 
 
-CREATE TABLE prix (
-    id INT AUTO_INCREMENT PRIMARY KEY,
-    prix_km_economy DECIMAL(10,2) NOT NULL,
-    prix_km_first_class DECIMAL(10,2) NOT NULL,
-    prix_km_vip DECIMAL(10,2) NOT NULL
+
+
+CREATE TABLE passagers (
+    id INT NOT NULL AUTO_INCREMENT,
+    reservation_id INT,
+    nom VARCHAR(100),
+    prenom VARCHAR(100),
+    date_naissance DATE,
+    passeport VARCHAR(50),
+    PRIMARY KEY (id),
+    FOREIGN KEY (reservation_id) REFERENCES reservations(id)
 );
 

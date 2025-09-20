@@ -108,51 +108,21 @@ app.post('/cartbillets', async (req, res) => {
   let pdfPath = null;
 
   try {
-    // Vérif email obligatoire
     if (!data.email) {
       return res.status(400).json({ message: 'Email manquant' });
     }
-
-    // 🔹 Conversion du flight_id
-    let flightIdInt = parseInt(data.flight_id);
-    if (isNaN(flightIdInt)) flightIdInt = 9999;
-
-    // 🔹 Conversion heures
-    const departureDatetime = data.date && data.departure 
-      ? `${data.date.split(' ')[0]} ${data.departure}:00` 
-      : `${new Date().toISOString().split('T')[0]} 08:00:00`;
-    
-    const arrivalDatetime = data.date && data.arrival 
-      ? `${data.date.split(' ')[0]} ${data.arrival}:00` 
-      : `${new Date().toISOString().split('T')[0]} 10:00:00`;
 
     // ========================================================
     // 1️⃣ Gestion UTILISATEUR
     // ========================================================
     let [userRows] = await db.promise().query(
-      "SELECT id, nom, prenom, telephone FROM utilisateurs WHERE email = ?",
+      "SELECT id FROM utilisateurs WHERE email = ?",
       [data.email]
     );
 
     let utilisateurId;
     if (userRows.length > 0) {
-      const existingUser = userRows[0];
-      if (
-        existingUser.nom === (data.nom || '') &&
-        existingUser.prenom === (data.prenom || '') &&
-        existingUser.telephone === (data.telephone || '')
-      ) {
-        utilisateurId = existingUser.id;
-        console.log("👤 Utilisateur existant réutilisé ID:", utilisateurId);
-      } else {
-        // ⚠️ Si les infos diffèrent → mise à jour
-        await db.promise().query(
-          "UPDATE utilisateurs SET nom=?, prenom=?, telephone=? WHERE id=?",
-          [data.nom || '', data.prenom || '', data.telephone || '', existingUser.id]
-        );
-        utilisateurId = existingUser.id;
-        console.log("♻️ Utilisateur mis à jour ID:", utilisateurId);
-      }
+      utilisateurId = userRows[0].id;
     } else {
       const [userResult] = await db.promise().query(
         `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription)
@@ -160,266 +130,251 @@ app.post('/cartbillets', async (req, res) => {
         [data.nom || '', data.prenom || '', data.telephone || '', data.email]
       );
       utilisateurId = userResult.insertId;
-      console.log("✅ Nouvel utilisateur créé ID:", utilisateurId);
     }
 
     // ========================================================
-    // 2️⃣ Insertion dans RESERVATIONS
+    // 2️⃣ Fonction d’insertion dans RESERVATIONS
     // ========================================================
-    const [resResult] = await db.promise().query(
-  `INSERT INTO reservations 
-  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-   place_selectionnee, airline_id, class_text, code_vol, 
-   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol)
-  VALUES (?, ?, ?, ?, NOW(),
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
-  [
-    utilisateurId,                          // utilisateur_id
-    flightIdInt,                            // vol_id
-    data.classe_id || 1,                    // classe_id
-    data.statut || 'Réservé',               // statut
-    data.nom || '',                         // nom
-    data.email,                             // email
-    data.adresse || '',                     // adresse
-    data.ville || '',                       // ville
-    data.date_naissance || null,            // date_naissance
-    data.pays || '',                        // pays
-    data.passeport || '',                   // passeport
-    data.expiration_passeport || null,      // expiration_passeport
-    data.seat || '',                        // place_selectionnee
-    data.airline_id || 0,                   // airline_id
-    data.class_text || 'Economy',           // class_text
-    data.code || `CODE${Date.now()}`,       // code_vol
-    data.departure || '08:00:00',           // heure_depart
-    data.arrival || '10:00:00',             // heure_arrivee
-    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],  // date_vol
-    data.from_location || '',               // aeroport_depart
-    data.to_location || '',                 // aeroport_arrivee
-    data.duree_vol || null                  // duree_vol
-  ]
-);
+    const insertReservation = async (seg, idx = 0, type = "oneway") => {
+      const flightIdInt = parseInt(seg.flight_id) || 9999;
 
-console.log('✅ Réservation insérée ID:', resResult.insertId);
+      const [resResult] = await db.promise().query(
+        `INSERT INTO reservations 
+        (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+         nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+         place_selectionnee, airline_id, class_text, code_vol, 
+         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+        VALUES (?, ?, ?, ?, NOW(),
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          utilisateurId,
+          flightIdInt,
+          seg.classe_id || 1,
+          data.statut || 'Réservé',
+          data.nom || '',
+          data.email,
+          data.adresse || '',
+          data.ville || '',
+          data.date_naissance || null,
+          data.pays || '',
+          data.passeport || '',
+          data.expiration_passeport || null,
+          seg.seat || '',
+          seg.airline_id || 0,
+          seg.class_text || 'Economy',
+          seg.code || `CODE${Date.now()}_${idx}`,
+          seg.departure || '08:00:00',
+          seg.arrival || '10:00:00',
+          seg.date ? seg.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+          seg.from_location || '',
+          seg.to_location || '',
+          seg.duree_vol || null,
+          type
+        ]
+      );
 
+      return resResult.insertId;
+    };
 
+    // ========================================================
+    // 3️⃣ Insérer dans RESERVATIONS selon types_de_vol
+    // ========================================================
+    let insertedReservations = [];
+
+    if (data.types_de_vol === "oneway") {
+      insertedReservations.push(await insertReservation(data, 0, "oneway"));
+    }
+    else if (data.types_de_vol === "roundtrip") {
+      // Aller
+      insertedReservations.push(await insertReservation({
+        ...data,
+        from_location: data.from_location,
+        to_location: data.to_location,
+        departure: data.departure,
+        arrival: data.arrival,
+        date: data.date
+      }, 0, "roundtrip"));
+
+      // Retour
+      insertedReservations.push(await insertReservation({
+        ...data,
+        from_location: data.to_location,
+        to_location: data.from_location,
+        departure: data.departure_retour,
+        arrival: data.arrival_retour,
+        date: data.date_retour
+      }, 1, "roundtrip"));
+    }
+    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+      for (let i = 0; i < data.segments.length; i++) {
+        insertedReservations.push(await insertReservation(data.segments[i], i, "multicity"));
+      }
+    }
+
+    console.log("✅ Reservations insérées:", insertedReservations);
+
+    // ========================================================
+    // 4️⃣ Insertion dans CARTBILLETS (réservation globale)
+    // ========================================================
     const [cartResult] = await db.promise().query(
-  `INSERT INTO cartbillets 
-  (utilisateurs_id, flight_id, airline, departure, arrival, 
-   from_location, to_location, price, date, class_text, code, 
-   seat, payment_method, email, types_de_vol, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-  [
-    utilisateurId,
-    flightIdInt,
-    data.airline || '',
-    departureDatetime,
-    arrivalDatetime,
-    data.from_location || '',
-    data.to_location || '',
-    data.price || 0,
-    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-    data.class_text || 'Economy',
-    data.code || `CODE${Date.now()}`,
-    data.seat || '',
-    data.payment_method || 'Carte',
-    data.email,
-    data.types_de_vol || ''
-  ]
-);
+      `INSERT INTO cartbillets 
+      (utilisateurs_id, flight_id, airline, departure, arrival, 
+       from_location, to_location, price, date, class_text, code, 
+       seat, payment_method, email, types_de_vol, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        utilisateurId,
+        parseInt(data.flight_id) || 9999,
+        data.airline || '',
+        data.departure || '08:00:00',
+        data.arrival || '10:00:00',
+        data.from_location || '',
+        data.to_location || '',
+        data.price || 0,
+        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+        data.class_text || 'Economy',
+        data.code || `CODE${Date.now()}`,
+        data.seat || '',
+        data.payment_method || 'Carte',
+        data.email,
+        data.types_de_vol || ''
+      ]
+    );
 
-console.log('✅ CartBillet inséré ID:', cartResult.insertId);
+    console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     // ========================================================
-    // 3️⃣ Génération du PDF billet
+    // 5️⃣ Génération PDF billet
     // ========================================================
-    // ========================================================
-// 3️⃣ Génération du PDF billet (OneWay / RoundTrip / MultiCity)
-// ========================================================
-pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
-if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
+    pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
+    if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
 
-const doc = new PDFDocument();
-const writeStream = fs.createWriteStream(pdfPath);
-doc.pipe(writeStream);
+    const doc = new PDFDocument();
+    const writeStream = fs.createWriteStream(pdfPath);
+    doc.pipe(writeStream);
 
-doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
-doc.moveDown();
-
-// Header infos principales
-doc.fontSize(12)
-  .text(`Numéro de réservation: ${data.code}`)
-  .text(`Passager: ${data.nom || ''} (${data.email})`)
-  .text(`Classe: ${data.class_text || 'Economy'}`)
-  .text(`Siège: ${data.seat || 'Non assigné'}`)
-  .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
-  .text(`Méthode de paiement: ${data.payment_method || 'Carte'}`);
-doc.moveDown();
-
-// 🔹 Selon le type de vol
-if (data.types_de_vol === "oneway") {
-  doc.fontSize(14).text("✈️ Trajet Aller (One Way)", { underline: true });
-  doc.fontSize(12)
-    .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
-    .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
-    .text(`Arrivée: ${data.to_location} à ${data.arrival}`)
-    .text(`Durée: ${data.duree_vol || 'Non précisé'}`);
-}
-
-else if (data.types_de_vol === "roundtrip") {
-  doc.fontSize(14).text("✈️ Trajet Aller", { underline: true });
-  doc.fontSize(12)
-    .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
-    .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
-    .text(`Arrivée: ${data.to_location} à ${data.arrival}`);
-  doc.moveDown();
-
-  doc.fontSize(14).text("✈️ Trajet Retour", { underline: true });
-  doc.fontSize(12)
-    .text(`Compagnie: ${data.airline_retour || data.airline || 'Non spécifié'}`)
-    .text(`Départ: ${data.to_location} le ${data.date_retour || ''} à ${data.departure_retour || ''}`)
-    .text(`Arrivée: ${data.from_location} à ${data.arrival_retour || ''}`);
-}
-
-else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
-  doc.fontSize(14).text("✈️ Trajets Multi-City", { underline: true });
-  data.segments.forEach((seg, idx) => {
+    doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
     doc.moveDown();
-    doc.fontSize(12).text(`Segment ${idx + 1}`);
-    doc.text(`Compagnie: ${seg.airline || 'Non spécifié'}`)
-       .text(`Départ: ${seg.from} le ${seg.date} à ${seg.departure}`)
-       .text(`Arrivée: ${seg.to} à ${seg.arrival}`);
-  });
-}
 
-doc.moveDown();
-doc.text('Merci d\'avoir choisi BookInPlane !', { align: 'center' });
+    doc.fontSize(12)
+      .text(`Passager: ${data.nom || ''} (${data.email})`)
+      .text(`Classe: ${data.class_text || 'Economy'}`)
+      .text(`Siège: ${data.seat || 'Non assigné'}`)
+      .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
+      .text(`Paiement: ${data.payment_method || 'Carte'}`);
+    doc.moveDown();
 
-doc.end();
-await new Promise((resolve, reject) => {
-  writeStream.on('finish', resolve);
-  writeStream.on('error', reject);
-});
-
-console.log('✅ PDF généré:', pdfPath);
-
-
-    // ========================================================
-    // 4️⃣ Envoi Email
-    // ========================================================
-    try {
-  const transporter = nodemailer.createTransport({
-    host: "smtp.gmail.com",
-    port: 465,
-    secure: true,
-    auth: {
-      user: process.env.SMTP_USER || "spencermimo@gmail.com",
-      pass: process.env.SMTP_PASS || "ton_mot_de_passe_app"
+    if (data.types_de_vol === "oneway") {
+      doc.fontSize(14).text("✈️ Trajet Aller (One Way)", { underline: true });
+      doc.fontSize(12)
+        .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
+        .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
+        .text(`Arrivée: ${data.to_location} à ${data.arrival}`);
     }
-  });
+    else if (data.types_de_vol === "roundtrip") {
+      doc.fontSize(14).text("✈️ Trajet Aller", { underline: true });
+      doc.fontSize(12)
+        .text(`${data.from_location} → ${data.to_location}`)
+        .text(`Départ: ${data.departure} le ${data.date}`)
+        .text(`Arrivée: ${data.arrival}`);
+      doc.moveDown();
 
-  await transporter.verify();
-  console.log("✅ SMTP Gmail prêt");
+      doc.fontSize(14).text("✈️ Trajet Retour", { underline: true });
+      doc.fontSize(12)
+        .text(`${data.to_location} → ${data.from_location}`)
+        .text(`Départ: ${data.departure_retour} le ${data.date_retour}`)
+        .text(`Arrivée: ${data.arrival_retour}`);
+    }
+    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+      doc.fontSize(14).text("✈️ Trajets Multi-City", { underline: true });
+      data.segments.forEach((seg, idx) => {
+        doc.moveDown();
+        doc.fontSize(12).text(`Segment ${idx + 1}`);
+        doc.text(`${seg.from} → ${seg.to}`)
+           .text(`Départ: ${seg.departure} le ${seg.date}`)
+           .text(`Arrivée: ${seg.arrival}`);
+      });
+    }
 
-  // ===============================
-  // 1️⃣ Construction du corps email
-  // ===============================
-  let emailContent = `
-    <h2>Confirmation de votre réservation</h2>
-    <p>Bonjour ${data.nom || "Cher Passager"},</p>
-    <p>Votre réservation est confirmée :</p>
-    <ul>
-      <li><b>Numéro:</b> ${data.code}</li>
-      <li><b>Classe:</b> ${data.class_text}</li>
-      <li><b>Prix:</b> ${data.price} ${data.currency || "USD"}</li>
-    </ul>
-  `;
+    doc.end();
+    await new Promise((resolve, reject) => {
+      writeStream.on('finish', resolve);
+      writeStream.on('error', reject);
+    });
 
-  // 🔹 Cas 1 : One Way
-  if (data.types_de_vol === "oneway") {
-    emailContent += `
-      <h3>✈️ Vol Aller</h3>
-      <p>
-        Compagnie : ${data.airline}<br/>
-        Trajet : ${data.from_location} → ${data.to_location}<br/>
-        Départ : ${data.departure} le ${data.date}<br/>
-        Arrivée : ${data.arrival}<br/>
-        Durée : ${data.duree_vol}
-      </p>
+    console.log('✅ PDF généré:', pdfPath);
+
+    // ========================================================
+    // 6️⃣ Envoi Email avec billet
+    // ========================================================
+    const transporter = nodemailer.createTransport({
+      host: "smtp.gmail.com",
+      port: 465,
+      secure: true,
+      auth: {
+        user: process.env.SMTP_USER || "spencermimo@gmail.com",
+        pass: process.env.SMTP_PASS || "ton_mot_de_passe_app"
+      }
+    });
+
+    await transporter.verify();
+
+    let emailContent = `
+      <h2>Confirmation de votre réservation</h2>
+      <p>Bonjour ${data.nom || "Cher Passager"},</p>
+      <p>Votre réservation est confirmée.</p>
     `;
-  }
 
-  // 🔹 Cas 2 : Round Trip
-  else if (data.types_de_vol === "roundtrip") {
-    emailContent += `
-      <h3>✈️ Vol Aller</h3>
-      <p>
-        Compagnie : ${data.airline}<br/>
-        ${data.from_location} → ${data.to_location}<br/>
-        Départ : ${data.departure} le ${data.date}<br/>
-        Arrivée : ${data.arrival}
-      </p>
-
-      <h3>✈️ Vol Retour</h3>
-      <p>
-        Compagnie : ${data.airline_retour || data.airline}<br/>
-        ${data.to_location} → ${data.from_location}<br/>
-        Départ : ${data.departure_retour} le ${data.date_retour}<br/>
-        Arrivée : ${data.arrival_retour}
-      </p>
-    `;
-  }
-
-  // 🔹 Cas 3 : Multi-City
-  else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
-    emailContent += `<h3>✈️ Itinéraire Multi-City</h3>`;
-    data.segments.forEach((seg, index) => {
+    if (data.types_de_vol === "oneway") {
       emailContent += `
-        <p>
-          <b>Segment ${index + 1}</b><br/>
-          Compagnie : ${seg.airline}<br/>
+        <h3>✈️ Vol Aller</h3>
+        <p>${data.from_location} → ${data.to_location}<br/>
+        Départ : ${data.departure} le ${data.date}<br/>
+        Arrivée : ${data.arrival}</p>`;
+    }
+    else if (data.types_de_vol === "roundtrip") {
+      emailContent += `
+        <h3>✈️ Vol Aller</h3>
+        <p>${data.from_location} → ${data.to_location}<br/>
+        Départ : ${data.departure} le ${data.date}<br/>
+        Arrivée : ${data.arrival}</p>
+        <h3>✈️ Vol Retour</h3>
+        <p>${data.to_location} → ${data.from_location}<br/>
+        Départ : ${data.departure_retour} le ${data.date_retour}<br/>
+        Arrivée : ${data.arrival_retour}</p>`;
+    }
+    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+      emailContent += `<h3>✈️ Itinéraire Multi-City</h3>`;
+      data.segments.forEach((seg, index) => {
+        emailContent += `
+          <p><b>Segment ${index + 1}</b><br/>
           ${seg.from} → ${seg.to}<br/>
           Départ : ${seg.departure} le ${seg.date}<br/>
-          Arrivée : ${seg.arrival}
-        </p>
-      `;
+          Arrivée : ${seg.arrival}</p>`;
+      });
+    }
+
+    emailContent += `<p>Votre billet est en pièce jointe.</p>`;
+
+    const info = await transporter.sendMail({
+      from: `"BookInPlane" <${process.env.SMTP_USER || "spencermimo@gmail.com"}>`,
+      to: data.email,
+      subject: "Votre billet de voyage BookInPlane",
+      html: emailContent,
+      attachments: [{ filename: `billet-${data.code}.pdf`, path: pdfPath }]
     });
-  }
 
-  emailContent += `<p>Votre billet est en pièce jointe.</p>`;
+    console.log("✅ Email envoyé ID:", info.messageId);
 
-  // ===============================
-  // 2️⃣ Envoi email
-  // ===============================
-  const info = await transporter.sendMail({
-    from: `"BookInPlane" <${process.env.SMTP_USER || "spencermimo@gmail.com"}>`,
-    to: data.email,
-    subject: "Votre billet de voyage BookInPlane",
-    html: emailContent,
-    attachments: [
-      { filename: `billet-${data.code}.pdf`, path: pdfPath }
-    ]
-  });
+    // Nettoyage
+    try { fs.unlinkSync(pdfPath); } catch {}
 
-  console.log("✅ Email envoyé ID:", info.messageId);
-
-} catch (err) {
-  console.error("❌ Erreur envoi email :", err);
-}
-
-
-    // Nettoyage PDF
-    try {
-      fs.unlinkSync(pdfPath);
-    } catch {}
-
-    // Réponse finale
     res.status(200).json({
-      message: "Réservation enregistrée et email envoyé",
+      message: "Réservation(s) et panier enregistrés, email envoyé",
       utilisateurId,
-      reservationId: resResult.insertId,
-      code: data.code
+      reservations: insertedReservations,
+      cartId: cartResult.insertId
     });
 
   } catch (err) {
@@ -428,6 +383,7 @@ console.log('✅ PDF généré:', pdfPath);
     res.status(500).json({ message: "Erreur serveur", error: err.message });
   }
 });
+
 
 /*
 app.post('/cartbillets', (req, res) => {

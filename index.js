@@ -249,30 +249,32 @@ app.post('/cartbillets', async (req, res) => {
     console.log("✅ Reservations insérées:", insertedReservations);
 
     // 4️⃣ Insertion dans cartbillets
-    const [cartResult] = await db.promise().query(
-      `INSERT INTO cartbillets 
-      (utilisateurs_id, flight_id, airline, departure, arrival, 
-       from_location, to_location, price, date, class_text, code, 
-       seat, payment_method, email, types_de_vol, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-      [
-        utilisateurId,
-        parseInt(data.flight_id) || 9999,
-        data.airline || '',
-        data.departure || '08:00:00',
-        data.arrival || '10:00:00',
-        data.from_location || '',
-        data.to_location || '',
-        data.price || 0,
-        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-        data.class_text || 'Economy',
-        data.code || `CODE${Date.now()}`,
-        data.seat || '',
-        data.payment_method || 'Carte',
-        data.email,
-        data.types_de_vol || ''
-      ]
-    );
+    // 4️⃣ Insertion dans cartbillets - CORRIGÉE
+const [cartResult] = await db.promise().query(
+  `INSERT INTO cartbillets 
+  (utilisateurs_id, flight_id, airline, departure, arrival, 
+   from_location, to_location, price, date, class_text, code, 
+   seat, payment_method, email, types_de_vol, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+  [
+    utilisateurId,
+    parseInt(data.flight_id) || 9999,
+    data.airline || '',
+    data.departure || null,  // ← Utilisez directement le DATETIME
+    data.arrival || null,    // ← Utilisez directement le DATETIME
+    data.from_location || '',
+    data.to_location || '',
+    data.price || 0,
+    // Extrait la date partie du DATETIME departure
+    data.departure ? data.departure.split(' ')[0] : (data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0]),
+    data.class_text || 'Economy',
+    data.code || `CODE${Date.now()}`,
+    data.seat || '',
+    data.payment_method || 'Carte',
+    data.email,
+    data.types_de_vol || ''
+  ]
+);
 
     console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 

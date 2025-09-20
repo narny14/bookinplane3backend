@@ -112,9 +112,7 @@ app.post('/cartbillets', async (req, res) => {
       return res.status(400).json({ message: 'Email manquant' });
     }
 
-    // ========================================================
-    // 1️⃣ Gestion UTILISATEUR
-    // ========================================================
+    // 1️⃣ Vérifier utilisateur ou créer
     let [userRows] = await db.promise().query(
       "SELECT id FROM utilisateurs WHERE email = ?",
       [data.email]
@@ -132,92 +130,101 @@ app.post('/cartbillets', async (req, res) => {
       utilisateurId = userResult.insertId;
     }
 
-    // ========================================================
-    // 2️⃣ Fonction d’insertion dans RESERVATIONS
-    // ========================================================
+    // 2️⃣ Fonction insertion réservation
     const insertReservation = async (seg, idx = 0, type = "oneway") => {
-  const flightIdInt = parseInt(seg.flight_id) || 9999;
+      const flightIdInt = parseInt(seg.flight_id) || 9999;
 
-  const [resResult] = await db.promise().query(
-    `INSERT INTO reservations 
-    (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-     nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-     place_selectionnee, airline_id, class_text, code_vol, 
-     heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
-    VALUES (?, ?, ?, ?, NOW(),
-      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-    `,
-    [
-      utilisateurId,
-      flightIdInt,
-      seg.classe_id || 1,
-      data.statut || 'Réservé',
-      data.nom || '',
-      data.email,
-      data.adresse || '',
-      data.ville || '',
-      data.date_naissance || null,
-      data.pays || '',
-      data.passeport || '',
-      data.expiration_passeport || null,
-      seg.seat || '',
-      seg.airline_id || 0,
-      seg.class_text || 'Economy',
-      seg.code || `CODE${Date.now()}_${idx}`,
-      seg.departure || '08:00:00',
-      seg.arrival || '10:00:00',
-      seg.date ? seg.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-      seg.from_location || seg.from || '',   // ✅ accepte les deux
-      seg.to_location || seg.to || '',       // ✅ accepte les deux
-      seg.duree_vol || null,
-      type
-    ]
-  );
+      const [resResult] = await db.promise().query(
+        `INSERT INTO reservations 
+        (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+         nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+         place_selectionnee, airline_id, class_text, code_vol, 
+         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+        VALUES (?, ?, ?, ?, NOW(),
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `,
+        [
+          utilisateurId,
+          flightIdInt,
+          seg.classe_id || 1,
+          data.statut || 'Réservé',
+          data.nom || '',
+          data.email,
+          data.adresse || '',
+          data.ville || '',
+          data.date_naissance || null,
+          data.pays || '',
+          data.passeport || '',
+          data.expiration_passeport || null,
+          seg.seat || '',
+          seg.airline_id || 0,
+          seg.class_text || 'Economy',
+          seg.code || `CODE${Date.now()}_${idx}`,
+          seg.departure || "00:00:00",
+          seg.arrival || "00:00:00",
+          seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
+          seg.from_location || seg.from || "N/A",
+          seg.to_location || seg.to || "N/A",
+          seg.duree_vol || "Non précisé",
+          type
+        ]
+      );
 
-  return resResult.insertId;
-};
+      return resResult.insertId;
+    };
 
-
-    // ========================================================
-    // 3️⃣ Insérer dans RESERVATIONS selon types_de_vol
-    // ========================================================
+    // 3️⃣ Insérer selon type de vol
     let insertedReservations = [];
 
     if (data.types_de_vol === "oneway") {
       insertedReservations.push(await insertReservation(data, 0, "oneway"));
     }
+
     else if (data.types_de_vol === "roundtrip") {
       // Aller
       insertedReservations.push(await insertReservation({
         ...data,
-        from_location: data.from_location,
-        to_location: data.to_location,
-        departure: data.departure,
-        arrival: data.arrival,
-        date: data.date
+        from_location: data.from_location || "N/A",
+        to_location: data.to_location || "N/A",
+        departure: data.departure || "00:00:00",
+        arrival: data.arrival || "00:00:00",
+        date: data.date || new Date().toISOString().split("T")[0],
+        code: `${data.code || "CODE"}-ALLER`
       }, 0, "roundtrip"));
 
       // Retour
       insertedReservations.push(await insertReservation({
         ...data,
-        from_location: data.to_location,
-        to_location: data.from_location,
-        departure: data.departure_retour,
-        arrival: data.arrival_retour,
-        date: data.date_retour
+        from_location: data.to_location || "N/A",
+        to_location: data.from_location || "N/A",
+        departure: data.departure_retour || "00:00:00",
+        arrival: data.arrival_retour || "00:00:00",
+        date: data.date_retour || new Date().toISOString().split("T")[0],
+        code: `${data.code || "CODE"}-RETOUR`
       }, 1, "roundtrip"));
     }
+
     else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
       for (let i = 0; i < data.segments.length; i++) {
-        insertedReservations.push(await insertReservation(data.segments[i], i, "multicity"));
+        const seg = {
+          ...data.segments[i],
+          from_location: data.segments[i].from || data.segments[i].from_location || "N/A",
+          to_location: data.segments[i].to || data.segments[i].to_location || "N/A",
+          departure: data.segments[i].departure || "00:00:00",
+          arrival: data.segments[i].arrival || "00:00:00",
+          date: data.segments[i].date || new Date().toISOString().split("T")[0],
+          class_text: data.segments[i].class_text || "Economy",
+          airline: data.segments[i].airline || "Non spécifié",
+          seat: data.segments[i].seat || "",
+          code: `${data.code || "CODE"}-SEG${i+1}`
+        };
+        insertedReservations.push(await insertReservation(seg, i, "multicity"));
       }
     }
 
     console.log("✅ Reservations insérées:", insertedReservations);
 
-    // ========================================================
-    // 4️⃣ Insertion dans CARTBILLETS (réservation globale)
-    // ========================================================
+    // 4️⃣ Insertion dans cartbillets
     const [cartResult] = await db.promise().query(
       `INSERT INTO cartbillets 
       (utilisateurs_id, flight_id, airline, departure, arrival, 
@@ -245,9 +252,7 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
-    // ========================================================
     // 5️⃣ Génération PDF billet
-    // ========================================================
     pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
     if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
 
@@ -255,46 +260,41 @@ app.post('/cartbillets', async (req, res) => {
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    doc.fontSize(20).text('Billet de Réservation BookInPlane', { align: 'center' });
+    doc.fontSize(20).text('Billet de Réservation - BookInPlane', { align: 'center' });
     doc.moveDown();
 
     doc.fontSize(12)
       .text(`Passager: ${data.nom || ''} (${data.email})`)
-      .text(`Classe: ${data.class_text || 'Economy'}`)
-      .text(`Siège: ${data.seat || 'Non assigné'}`)
-      .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
-      .text(`Paiement: ${data.payment_method || 'Carte'}`);
-    doc.moveDown();
+      .text(`Paiement: ${data.payment_method || 'Carte'}`)
+      .text(`Prix total: ${data.price || 0} ${data.currency || 'USD'}`)
+      .moveDown();
 
     if (data.types_de_vol === "oneway") {
-      doc.fontSize(14).text("✈️ Trajet Aller (One Way)", { underline: true });
-      doc.fontSize(12)
-        .text(`Compagnie: ${data.airline || 'Non spécifié'}`)
-        .text(`Départ: ${data.from_location} le ${data.date} à ${data.departure}`)
-        .text(`Arrivée: ${data.to_location} à ${data.arrival}`);
-    }
-    else if (data.types_de_vol === "roundtrip") {
-      doc.fontSize(14).text("✈️ Trajet Aller", { underline: true });
+      doc.fontSize(14).text("✈️ Vol Aller", { underline: true });
       doc.fontSize(12)
         .text(`${data.from_location} → ${data.to_location}`)
         .text(`Départ: ${data.departure} le ${data.date}`)
         .text(`Arrivée: ${data.arrival}`);
+    }
+    else if (data.types_de_vol === "roundtrip") {
+      doc.fontSize(14).text("✈️ Vol Aller", { underline: true });
+      doc.text(`${data.from_location} → ${data.to_location}`)
+        .text(`Départ: ${data.departure} le ${data.date}`)
+        .text(`Arrivée: ${data.arrival}`);
       doc.moveDown();
-
-      doc.fontSize(14).text("✈️ Trajet Retour", { underline: true });
-      doc.fontSize(12)
-        .text(`${data.to_location} → ${data.from_location}`)
+      doc.fontSize(14).text("✈️ Vol Retour", { underline: true });
+      doc.text(`${data.to_location} → ${data.from_location}`)
         .text(`Départ: ${data.departure_retour} le ${data.date_retour}`)
         .text(`Arrivée: ${data.arrival_retour}`);
     }
     else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
-      doc.fontSize(14).text("✈️ Trajets Multi-City", { underline: true });
+      doc.fontSize(14).text("✈️ Itinéraire Multi-City", { underline: true });
       data.segments.forEach((seg, idx) => {
         doc.moveDown();
-        doc.fontSize(12).text(`Segment ${idx + 1}`);
-        doc.text(`${seg.from} → ${seg.to}`)
-           .text(`Départ: ${seg.departure} le ${seg.date}`)
-           .text(`Arrivée: ${seg.arrival}`);
+        doc.text(`Segment ${idx + 1}`);
+        doc.text(`${seg.from} → ${seg.to}`);
+        doc.text(`Départ: ${seg.departure} le ${seg.date}`);
+        doc.text(`Arrivée: ${seg.arrival}`);
       });
     }
 
@@ -306,9 +306,7 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log('✅ PDF généré:', pdfPath);
 
-    // ========================================================
-    // 6️⃣ Envoi Email avec billet
-    // ========================================================
+    // 6️⃣ Envoi Email
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -328,31 +326,16 @@ app.post('/cartbillets', async (req, res) => {
     `;
 
     if (data.types_de_vol === "oneway") {
-      emailContent += `
-        <h3>✈️ Vol Aller</h3>
-        <p>${data.from_location} → ${data.to_location}<br/>
-        Départ : ${data.departure} le ${data.date}<br/>
-        Arrivée : ${data.arrival}</p>`;
+      emailContent += `<p><b>${data.from_location} → ${data.to_location}</b><br/>Départ: ${data.departure} le ${data.date}<br/>Arrivée: ${data.arrival}</p>`;
     }
     else if (data.types_de_vol === "roundtrip") {
-      emailContent += `
-        <h3>✈️ Vol Aller</h3>
-        <p>${data.from_location} → ${data.to_location}<br/>
-        Départ : ${data.departure} le ${data.date}<br/>
-        Arrivée : ${data.arrival}</p>
-        <h3>✈️ Vol Retour</h3>
-        <p>${data.to_location} → ${data.from_location}<br/>
-        Départ : ${data.departure_retour} le ${data.date_retour}<br/>
-        Arrivée : ${data.arrival_retour}</p>`;
+      emailContent += `<h3>Vol Aller</h3><p>${data.from_location} → ${data.to_location}<br/>Départ: ${data.departure} le ${data.date}<br/>Arrivée: ${data.arrival}</p>`;
+      emailContent += `<h3>Vol Retour</h3><p>${data.to_location} → ${data.from_location}<br/>Départ: ${data.departure_retour} le ${data.date_retour}<br/>Arrivée: ${data.arrival_retour}</p>`;
     }
     else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
-      emailContent += `<h3>✈️ Itinéraire Multi-City</h3>`;
+      emailContent += `<h3>Itinéraire Multi-City</h3>`;
       data.segments.forEach((seg, index) => {
-        emailContent += `
-          <p><b>Segment ${index + 1}</b><br/>
-          ${seg.from} → ${seg.to}<br/>
-          Départ : ${seg.departure} le ${seg.date}<br/>
-          Arrivée : ${seg.arrival}</p>`;
+        emailContent += `<p><b>Segment ${index+1}</b><br/>${seg.from} → ${seg.to}<br/>Départ: ${seg.departure} le ${seg.date}<br/>Arrivée: ${seg.arrival}</p>`;
       });
     }
 
@@ -368,11 +351,11 @@ app.post('/cartbillets', async (req, res) => {
 
     console.log("✅ Email envoyé ID:", info.messageId);
 
-    // Nettoyage
+    // Nettoyage fichier temporaire
     try { fs.unlinkSync(pdfPath); } catch {}
 
     res.status(200).json({
-      message: "Réservation(s) et panier enregistrés, email envoyé",
+      message: "Réservation(s) + panier sauvegardés, billet envoyé par email",
       utilisateurId,
       reservations: insertedReservations,
       cartId: cartResult.insertId

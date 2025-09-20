@@ -260,13 +260,12 @@ const [cartResult] = await db.promise().query(
     utilisateurId,
     parseInt(data.flight_id) || 9999,
     data.airline || '',
-    data.departure || null,  // ← Utilisez directement le DATETIME
-    data.arrival || null,    // ← Utilisez directement le DATETIME
+    data.departure || null,           // departure (DATETIME/TIME)
+    data.arrival || null,             // arrival (DATETIME/TIME)
     data.from_location || '',
     data.to_location || '',
     data.price || 0,
-    // Extrait la date partie du DATETIME departure
-    data.departure ? data.departure.split(' ')[0] : (data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0]),
+    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0], // ← DATE seulement!
     data.class_text || 'Economy',
     data.code || `CODE${Date.now()}`,
     data.seat || '',

@@ -136,46 +136,47 @@ app.post('/cartbillets', async (req, res) => {
     // 2️⃣ Fonction d’insertion dans RESERVATIONS
     // ========================================================
     const insertReservation = async (seg, idx = 0, type = "oneway") => {
-      const flightIdInt = parseInt(seg.flight_id) || 9999;
+  const flightIdInt = parseInt(seg.flight_id) || 9999;
 
-      const [resResult] = await db.promise().query(
-        `INSERT INTO reservations 
-        (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-         nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-         place_selectionnee, airline_id, class_text, code_vol, 
-         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
-        VALUES (?, ?, ?, ?, NOW(),
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `,
-        [
-          utilisateurId,
-          flightIdInt,
-          seg.classe_id || 1,
-          data.statut || 'Réservé',
-          data.nom || '',
-          data.email,
-          data.adresse || '',
-          data.ville || '',
-          data.date_naissance || null,
-          data.pays || '',
-          data.passeport || '',
-          data.expiration_passeport || null,
-          seg.seat || '',
-          seg.airline_id || 0,
-          seg.class_text || 'Economy',
-          seg.code || `CODE${Date.now()}_${idx}`,
-          seg.departure || '08:00:00',
-          seg.arrival || '10:00:00',
-          seg.date ? seg.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-          seg.from_location || '',
-          seg.to_location || '',
-          seg.duree_vol || null,
-          type
-        ]
-      );
+  const [resResult] = await db.promise().query(
+    `INSERT INTO reservations 
+    (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+     nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+     place_selectionnee, airline_id, class_text, code_vol, 
+     heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+    VALUES (?, ?, ?, ?, NOW(),
+      ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `,
+    [
+      utilisateurId,
+      flightIdInt,
+      seg.classe_id || 1,
+      data.statut || 'Réservé',
+      data.nom || '',
+      data.email,
+      data.adresse || '',
+      data.ville || '',
+      data.date_naissance || null,
+      data.pays || '',
+      data.passeport || '',
+      data.expiration_passeport || null,
+      seg.seat || '',
+      seg.airline_id || 0,
+      seg.class_text || 'Economy',
+      seg.code || `CODE${Date.now()}_${idx}`,
+      seg.departure || '08:00:00',
+      seg.arrival || '10:00:00',
+      seg.date ? seg.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+      seg.from_location || seg.from || '',   // ✅ accepte les deux
+      seg.to_location || seg.to || '',       // ✅ accepte les deux
+      seg.duree_vol || null,
+      type
+    ]
+  );
 
-      return resResult.insertId;
-    };
+  return resResult.insertId;
+};
+
 
     // ========================================================
     // 3️⃣ Insérer dans RESERVATIONS selon types_de_vol

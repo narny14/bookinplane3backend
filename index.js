@@ -134,10 +134,19 @@ app.post('/cartbillets', async (req, res) => {
       utilisateurId = userResult.insertId;
     }
 
+    const crypto = require("crypto");
+
+// Générateur de flight_id basé sur les infos du vol
+const generateFlightId = (seg) => {
+  const key = `${seg.airline || ''}-${seg.from_location || ''}-${seg.to_location || ''}-${seg.date || ''}-${seg.departure || ''}-${seg.arrival || ''}`;
+  // On prend un hash stable, et on garde un entier
+  const hash = crypto.createHash("md5").update(key).digest("hex");
+  return parseInt(hash.substring(0, 8), 16); // entier 32 bits
+};
+
     // 2️⃣ Fonction insertion réservation - CORRIGÉE
     const insertReservation = async (seg, idx = 0, type = "oneway") => {
-      const flightIdInt = parseInt(seg.flight_id) || 9999;
-
+      const flightIdInt = generateFlightId(seg);
       // CALCUL DE LA DURÉE DU VOL - CORRECTION
       let dureeVol = "02:00:00"; // Valeur par défaut
       
@@ -195,7 +204,7 @@ const [resResult] = await db.promise().query(
 
 
 
-      return resResult.insertId;
+      return { reservationId: resResult.insertId, flightId: flightIdInt };
     };
 
     // 3️⃣ Insérer selon type de vol
@@ -252,29 +261,30 @@ const [resResult] = await db.promise().query(
     // 4️⃣ Insertion dans cartbillets
     // 4️⃣ Insertion dans cartbillets - CORRIGÉE
 // 4️⃣ Insertion dans cartbillets - CORRECTION DÉFINITIVE
+const { reservationId, flightId } = await insertReservation(data, 0, "oneway");
+
 const [cartResult] = await db.promise().query(
   `INSERT INTO cartbillets 
-  (utilisateurs_id, flight_id, airline, departure, arrival, 
+  (utilisateur_id, flight_id, airline, departure, arrival, 
    from_location, to_location, price, date, class_text, code, 
-   seat, payment_method, email, types_de_vol, duree_vol, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+   seat, payment_method, email, types_de_vol, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
   [
     utilisateurId,
-    data.flight_id || 0,                     // 👈 toujours un int, même si 0
-    data.airline || 'Non spécifié',
-    data.departure || "00:00:00",
-    data.arrival || "00:00:00",
-    data.from_location || 'N/A',
-    data.to_location || 'N/A',
+    flightId,   // 👈 même calcul
+    data.airline || '',
+    data.departure || null,
+    data.arrival || null,
+    data.from_location || '',
+    data.to_location || '',
     data.price || 0,
-    data.date ? data.date.split(" ")[0] : new Date().toISOString().split("T")[0],
+    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
     data.class_text || 'Economy',
-    data.code ? data.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}`,
+    data.code,
     data.seat || '',
     data.payment_method || 'Carte',
     data.email,
-    data.types_de_vol || 'oneway',
-    data.duree_vol || "02:00:00"             // 👈 ajouté pour correspondre à la colonne
+    data.types_de_vol || ''
   ]
 );
 

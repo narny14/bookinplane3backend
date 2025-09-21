@@ -158,42 +158,31 @@ app.post('/cartbillets', async (req, res) => {
         }
       }
 
-      const [resResult] = await db.promise().query(
+const [resResult] = await db.promise().query(
   `INSERT INTO reservations 
-  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-   place_selectionnee, airline_id, class_text, code_vol, 
-   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
-  VALUES (?, ?, ?, ?, NOW(),
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-  `,
+  (utilisateurs_id, flight_id, airline, departure, arrival,
+   from_location, to_location, price, date, class_text, code, 
+   seat, email, created_at, types_de_vol, duree_vol)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
   [
     utilisateurId,
     flightIdInt,
-    seg.classe_id || 1,
-    data.statut || 'Réservé',
-    data.nom || '',
-    data.email,
-    data.adresse || '',
-    data.ville || '',
-    data.date_naissance || null,
-    data.pays || '',
-    data.passeport || '',
-    data.expiration_passeport || null,
-    seg.seat || '',
-    seg.airline_id || 0,
-    seg.class_text || 'Economy',
-    // CORRECTION : Code court (max 20 caractères)
-    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}${idx}`,
-    seg.departure || "00:00:00",
-    seg.arrival || "00:00:00",
+    seg.airline || '',
+    seg.departure || null,
+    seg.arrival || null,
+    seg.from_location || 'N/A',
+    seg.to_location || 'N/A',
+    seg.price || 0,
     seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
-    seg.from_location || seg.from || "N/A",
-    seg.to_location || seg.to || "N/A",
-    dureeVol,
-    type
+    seg.class_text || 'Economy',
+    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}`,
+    seg.seat || '',
+    data.email,
+    type,       // types_de_vol (oneway / roundtrip / multicity)
+    dureeVol    // durée calculée
   ]
 );
+
 
       return resResult.insertId;
     };
@@ -256,11 +245,11 @@ const [cartResult] = await db.promise().query(
   `INSERT INTO cartbillets 
   (utilisateurs_id, flight_id, airline, departure, arrival, 
    from_location, to_location, price, date, class_text, code, 
-   seat, payment_method, email, types_de_vol, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+   seat, payment_method, email, created_at, types_de_vol, duree_vol)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
   [
     utilisateurId,
-    null,  // ← REMPLACER flight_id PAR null
+    data.flight_id || null,
     data.airline || '',
     data.departure || null,
     data.arrival || null,
@@ -273,9 +262,11 @@ const [cartResult] = await db.promise().query(
     data.seat || '',
     data.payment_method || 'Carte',
     data.email,
-    data.types_de_vol || ''
+    data.types_de_vol || '',
+    "02:00:00"   // valeur par défaut de durée de vol
   ]
 );
+
 
     console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 

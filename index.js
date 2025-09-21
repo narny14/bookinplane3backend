@@ -160,10 +160,10 @@ app.post('/cartbillets', async (req, res) => {
 
 const [resResult] = await db.promise().query(
   `INSERT INTO reservations 
-  (utilisateurs_id, flight_id, airline, departure, arrival,
-   from_location, to_location, price, date, class_text, code, 
-   seat, email, created_at, types_de_vol, duree_vol)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
+(utilisateur_id, flight_id, airline, departure, arrival,
+ from_location, to_location, price, date, class_text, code, 
+ seat, email, created_at, types_de_vol, duree_vol)
+VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
   [
     utilisateurId,
     flightIdInt,

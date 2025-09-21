@@ -256,30 +256,29 @@ const [cartResult] = await db.promise().query(
   `INSERT INTO cartbillets 
   (utilisateurs_id, flight_id, airline, departure, arrival, 
    from_location, to_location, price, date, class_text, code, 
-   seat, payment_method, email, created_at, types_de_vol, duree_vol)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
+   seat, payment_method, email, types_de_vol, duree_vol, created_at)
+  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
   [
     utilisateurId,
-    data.flight_id || null,
-    data.airline || '',
-    data.departure || null,
-    data.arrival || null,
-    data.from_location || '',
-    data.to_location || '',
+    data.flight_id || 0,                     // 👈 toujours un int, même si 0
+    data.airline || 'Non spécifié',
+    data.departure || "00:00:00",
+    data.arrival || "00:00:00",
+    data.from_location || 'N/A',
+    data.to_location || 'N/A',
     data.price || 0,
-    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+    data.date ? data.date.split(" ")[0] : new Date().toISOString().split("T")[0],
     data.class_text || 'Economy',
     data.code ? data.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}`,
     data.seat || '',
     data.payment_method || 'Carte',
     data.email,
-    data.types_de_vol || '',
-    "02:00:00"   // valeur par défaut de durée de vol
+    data.types_de_vol || 'oneway',
+    data.duree_vol || "02:00:00"             // 👈 ajouté pour correspondre à la colonne
   ]
 );
 
-
-    console.log('✅ CartBillet inséré ID:', cartResult.insertId);
+console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     // 5️⃣ Génération PDF billet
     pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);

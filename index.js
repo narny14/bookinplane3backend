@@ -160,28 +160,39 @@ app.post('/cartbillets', async (req, res) => {
 
 const [resResult] = await db.promise().query(
   `INSERT INTO reservations 
-(utilisateur_id, vol_id, airline, departure, arrival,
- from_location, to_location, price, date, class_text, code, 
- seat, email, created_at, types_de_vol, duree_vol)
-VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), ?, ?)`,
+  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+   place_selectionnee, airline_id, class_text, code_vol, 
+   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+  VALUES (?, ?, ?, ?, NOW(),
+    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
   [
     utilisateurId,
     flightIdInt,
-    seg.airline || '',
-    seg.departure || null,
-    seg.arrival || null,
-    seg.from_location || 'N/A',
-    seg.to_location || 'N/A',
-    seg.price || 0,
-    seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
-    seg.class_text || 'Economy',
-    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}`,
-    seg.seat || '',
+    seg.classe_id || 1,
+    data.statut || 'Réservé',
+    data.nom || '',
     data.email,
-    type,       // types_de_vol (oneway / roundtrip / multicity)
-    dureeVol    // durée calculée
+    data.adresse || '',
+    data.ville || '',
+    data.date_naissance || null,
+    data.pays || '',
+    data.passeport || '',
+    data.expiration_passeport || null,
+    seg.seat || '',
+    seg.airline_id || 0, // 👈 Correction ici
+    seg.class_text || 'Economy',
+    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}${idx}`,
+    seg.departure || "00:00:00",
+    seg.arrival || "00:00:00",
+    seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
+    seg.from_location || seg.from || "N/A",
+    seg.to_location || seg.to || "N/A",
+    dureeVol,
+    type
   ]
 );
+
 
 
       return resResult.insertId;

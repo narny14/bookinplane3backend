@@ -1,1 +1,1 @@
-DESCRIBE cartbillets ;
+DESCRIBE reservations ;

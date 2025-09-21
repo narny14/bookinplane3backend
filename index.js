@@ -136,73 +136,69 @@ app.post('/cartbillets', async (req, res) => {
 
     const crypto = require("crypto");
 
-// Générateur de flight_id basé sur les infos du vol
-const generateFlightId = (seg) => {
-  const key = `${seg.airline || ''}-${seg.from_location || ''}-${seg.to_location || ''}-${seg.date || ''}-${seg.departure || ''}-${seg.arrival || ''}`;
-  // On prend un hash stable, et on garde un entier
-  const hash = crypto.createHash("md5").update(key).digest("hex");
-  return parseInt(hash.substring(0, 8), 16); // entier 32 bits
-};
+    // Générateur de flight_id basé sur (from, to, date)
+    const generateFlightId = (seg) => {
+      const key = `${seg.from_location || seg.from || ''}-${seg.to_location || seg.to || ''}-${seg.date ? seg.date.split(" ")[0] : ''}`;
+      const hash = crypto.createHash("md5").update(key).digest("hex");
+      return parseInt(hash.substring(0, 8), 16); // entier 32 bits
+    };
 
-    // 2️⃣ Fonction insertion réservation - CORRIGÉE
+    // 2️⃣ Fonction insertion réservation
     const insertReservation = async (seg, idx = 0, type = "oneway") => {
       const flightIdInt = generateFlightId(seg);
-      // CALCUL DE LA DURÉE DU VOL - CORRECTION
-      let dureeVol = "02:00:00"; // Valeur par défaut
-      
+
+      // Calcul durée vol
+      let dureeVol = "02:00:00";
       if (seg.departure && seg.arrival) {
         try {
-          // Convertir les heures en objets Date pour calculer la différence
           const [depHours, depMins] = seg.departure.split(':').map(Number);
           const [arrHours, arrMins] = seg.arrival.split(':').map(Number);
-          
+
           let totalMins = (arrHours * 60 + arrMins) - (depHours * 60 + depMins);
-          if (totalMins < 0) totalMins += 1440; // Si ça passe à minuit
-          
+          if (totalMins < 0) totalMins += 1440;
+
           const hours = Math.floor(totalMins / 60);
           const mins = totalMins % 60;
           dureeVol = `${String(hours).padStart(2, '0')}:${String(mins).padStart(2, '0')}:00`;
-        } catch (e) {
-          dureeVol = "02:00:00"; // Valeur par défaut en cas d'erreur
+        } catch {
+          dureeVol = "02:00:00";
         }
       }
 
-const [resResult] = await db.promise().query(
-  `INSERT INTO reservations 
-  (utilisateur_id, vol_id, classe_id, statut, date_reservation,
-   nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
-   place_selectionnee, airline_id, class_text, code_vol, 
-   heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
-  VALUES (?, ?, ?, ?, NOW(),
-    ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-  [
-    utilisateurId,
-    flightIdInt,
-    seg.classe_id || 1,
-    data.statut || 'Réservé',
-    data.nom || '',
-    data.email,
-    data.adresse || '',
-    data.ville || '',
-    data.date_naissance || null,
-    data.pays || '',
-    data.passeport || '',
-    data.expiration_passeport || null,
-    seg.seat || '',
-    seg.airline_id || 0, // 👈 Correction ici
-    seg.class_text || 'Economy',
-    seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}${idx}`,
-    seg.departure || "00:00:00",
-    seg.arrival || "00:00:00",
-    seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
-    seg.from_location || seg.from || "N/A",
-    seg.to_location || seg.to || "N/A",
-    dureeVol,
-    type
-  ]
-);
-
-
+      const [resResult] = await db.promise().query(
+        `INSERT INTO reservations 
+        (utilisateur_id, vol_id, classe_id, statut, date_reservation,
+         nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
+         place_selectionnee, airline_id, class_text, code_vol, 
+         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+        VALUES (?, ?, ?, ?, NOW(),
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [
+          utilisateurId,
+          flightIdInt,
+          seg.classe_id || 1,
+          data.statut || 'Réservé',
+          data.nom || '',
+          data.email,
+          data.adresse || '',
+          data.ville || '',
+          data.date_naissance || null,
+          data.pays || '',
+          data.passeport || '',
+          data.expiration_passeport || null,
+          seg.seat || '',
+          seg.airline_id || 0,
+          seg.class_text || 'Economy',
+          seg.code ? seg.code.slice(0, 19) : `C${Date.now().toString().slice(-8)}${idx}`,
+          seg.departure || "00:00:00",
+          seg.arrival || "00:00:00",
+          seg.date ? seg.date.split(" ")[0] : new Date().toISOString().split("T")[0],
+          seg.from_location || seg.from || "N/A",
+          seg.to_location || seg.to || "N/A",
+          dureeVol,
+          type
+        ]
+      );
 
       return { reservationId: resResult.insertId, flightId: flightIdInt };
     };
@@ -212,41 +208,35 @@ const [resResult] = await db.promise().query(
 
     if (data.types_de_vol === "oneway") {
       insertedReservations.push(await insertReservation(data, 0, "oneway"));
-    }
-
-    else if (data.types_de_vol === "roundtrip") {
-      // Aller
+    } else if (data.types_de_vol === "roundtrip") {
       insertedReservations.push(await insertReservation({
         ...data,
-        from_location: data.from_location || "N/A",
-        to_location: data.to_location || "N/A",
-        departure: data.departure || "00:00:00",
-        arrival: data.arrival || "00:00:00",
-        date: data.date || new Date().toISOString().split("T")[0],
+        from_location: data.from_location,
+        to_location: data.to_location,
+        departure: data.departure,
+        arrival: data.arrival,
+        date: data.date,
         code: `${data.code || "CODE"}-ALLER`
       }, 0, "roundtrip"));
 
-      // Retour
       insertedReservations.push(await insertReservation({
         ...data,
-        from_location: data.to_location || "N/A",
-        to_location: data.from_location || "N/A",
-        departure: data.departure_retour || "00:00:00",
-        arrival: data.arrival_retour || "00:00:00",
-        date: data.date_retour || new Date().toISOString().split("T")[0],
+        from_location: data.to_location,
+        to_location: data.from_location,
+        departure: data.departure_retour,
+        arrival: data.arrival_retour,
+        date: data.date_retour,
         code: `${data.code || "CODE"}-RETOUR`
       }, 1, "roundtrip"));
-    }
-
-    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+    } else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
       for (let i = 0; i < data.segments.length; i++) {
         const seg = {
           ...data.segments[i],
-          from_location: data.segments[i].from || data.segments[i].from_location || "N/A",
-          to_location: data.segments[i].to || data.segments[i].to_location || "N/A",
-          departure: data.segments[i].departure || "00:00:00",
-          arrival: data.segments[i].arrival || "00:00:00",
-          date: data.segments[i].date || new Date().toISOString().split("T")[0],
+          from_location: data.segments[i].from || data.segments[i].from_location,
+          to_location: data.segments[i].to || data.segments[i].to_location,
+          departure: data.segments[i].departure,
+          arrival: data.segments[i].arrival,
+          date: data.segments[i].date,
           class_text: data.segments[i].class_text || "Economy",
           airline: data.segments[i].airline || "Non spécifié",
           seat: data.segments[i].seat || "",
@@ -258,39 +248,40 @@ const [resResult] = await db.promise().query(
 
     console.log("✅ Reservations insérées:", insertedReservations);
 
-    // 4️⃣ Insertion dans cartbillets
-    // 4️⃣ Insertion dans cartbillets - CORRIGÉE
-// 4️⃣ Insertion dans cartbillets - CORRECTION DÉFINITIVE
-const { reservationId, flightId } = await insertReservation(data, 0, "oneway");
+    // 4️⃣ Insertion dans cartbillets avec flightId unique
+    const flightIdForCart = insertedReservations[0].flightId;
+    const [cartResult] = await db.promise().query(
+      `INSERT INTO cartbillets 
+      (utilisateur_id, flight_id, airline, departure, arrival, 
+       from_location, to_location, price, date, class_text, code, 
+       seat, payment_method, email, types_de_vol, created_at)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+      [
+        utilisateurId,
+        flightIdForCart,
+        data.airline || '',
+        data.departure || null,
+        data.arrival || null,
+        data.from_location || '',
+        data.to_location || '',
+        data.price || 0,
+        data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
+        data.class_text || 'Economy',
+        data.code,
+        data.seat || '',
+        data.payment_method || 'Carte',
+        data.email,
+        data.types_de_vol || ''
+      ]
+    );
 
-const [cartResult] = await db.promise().query(
-  `INSERT INTO cartbillets 
-  (utilisateur_id, flight_id, airline, departure, arrival, 
-   from_location, to_location, price, date, class_text, code, 
-   seat, payment_method, email, types_de_vol, created_at)
-  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
-  [
-    utilisateurId,
-    flightId,   // 👈 même calcul
-    data.airline || '',
-    data.departure || null,
-    data.arrival || null,
-    data.from_location || '',
-    data.to_location || '',
-    data.price || 0,
-    data.date ? data.date.split(' ')[0] : new Date().toISOString().split('T')[0],
-    data.class_text || 'Economy',
-    data.code,
-    data.seat || '',
-    data.payment_method || 'Carte',
-    data.email,
-    data.types_de_vol || ''
-  ]
-);
-
-console.log('✅ CartBillet inséré ID:', cartResult.insertId);
+    console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     // 5️⃣ Génération PDF billet
+    const fs = require("fs");
+    const path = require("path");
+    const PDFDocument = require("pdfkit");
+
     pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
     if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
 
@@ -313,8 +304,7 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
         .text(`${data.from_location} → ${data.to_location}`)
         .text(`Départ: ${data.departure} le ${data.date}`)
         .text(`Arrivée: ${data.arrival}`);
-    }
-    else if (data.types_de_vol === "roundtrip") {
+    } else if (data.types_de_vol === "roundtrip") {
       doc.fontSize(14).text("✈️ Vol Aller", { underline: true });
       doc.text(`${data.from_location} → ${data.to_location}`)
         .text(`Départ: ${data.departure} le ${data.date}`)
@@ -324,8 +314,7 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
       doc.text(`${data.to_location} → ${data.from_location}`)
         .text(`Départ: ${data.departure_retour} le ${data.date_retour}`)
         .text(`Arrivée: ${data.arrival_retour}`);
-    }
-    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+    } else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
       doc.fontSize(14).text("✈️ Itinéraire Multi-City", { underline: true });
       data.segments.forEach((seg, idx) => {
         doc.moveDown();
@@ -345,6 +334,8 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
     console.log('✅ PDF généré:', pdfPath);
 
     // 6️⃣ Envoi Email
+    const nodemailer = require("nodemailer");
+
     const transporter = nodemailer.createTransport({
       host: "smtp.gmail.com",
       port: 465,
@@ -365,12 +356,10 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     if (data.types_de_vol === "oneway") {
       emailContent += `<p><b>${data.from_location} → ${data.to_location}</b><br/>Départ: ${data.departure} le ${data.date}<br/>Arrivée: ${data.arrival}</p>`;
-    }
-    else if (data.types_de_vol === "roundtrip") {
+    } else if (data.types_de_vol === "roundtrip") {
       emailContent += `<h3>Vol Aller</h3><p>${data.from_location} → ${data.to_location}<br/>Départ: ${data.departure} le ${data.date}<br/>Arrivée: ${data.arrival}</p>`;
       emailContent += `<h3>Vol Retour</h3><p>${data.to_location} → ${data.from_location}<br/>Départ: ${data.departure_retour} le ${data.date_retour}<br/>Arrivée: ${data.arrival_retour}</p>`;
-    }
-    else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
+    } else if (data.types_de_vol === "multicity" && Array.isArray(data.segments)) {
       emailContent += `<h3>Itinéraire Multi-City</h3>`;
       data.segments.forEach((seg, index) => {
         emailContent += `<p><b>Segment ${index+1}</b><br/>${seg.from} → ${seg.to}<br/>Départ: ${seg.departure} le ${seg.date}<br/>Arrivée: ${seg.arrival}</p>`;
@@ -389,7 +378,6 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
 
     console.log("✅ Email envoyé ID:", info.messageId);
 
-    // Nettoyage fichier temporaire
     try { fs.unlinkSync(pdfPath); } catch {}
 
     res.status(200).json({
@@ -405,6 +393,7 @@ console.log('✅ CartBillet inséré ID:', cartResult.insertId);
     res.status(500).json({ message: "Erreur serveur", error: err.message });
   }
 });
+
 
 
 /*

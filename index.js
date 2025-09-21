@@ -174,7 +174,7 @@ app.post('/cartbillets', async (req, res) => {
         VALUES (?, ?, ?, ?, NOW(),
           ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
-          utilisateurId,
+          utilisateurs_id,
           flightIdInt,
           seg.classe_id || 1,
           data.statut || 'Réservé',
@@ -257,7 +257,7 @@ app.post('/cartbillets', async (req, res) => {
        seat, payment_method, email, types_de_vol, created_at)
       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
       [
-        utilisateurId,
+        utilisateurs_id,
         flightIdForCart,
         data.airline || '',
         data.departure || null,

@@ -1,1 +1,2 @@
-DESCRIBE reservations ;
+ALTER TABLE reservations MODIFY vol_id BIGINT UNSIGNED;
+ALTER TABLE cartbillets MODIFY flight_id BIGINT UNSIGNED;

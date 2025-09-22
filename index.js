@@ -170,9 +170,9 @@ app.post('/cartbillets', async (req, res) => {
         (utilisateur_id, vol_id, classe_id, statut, date_reservation,
          nom, email, adresse, ville, date_naissance, pays, passeport, expiration_passeport,
          place_selectionnee, airline_id, class_text, code_vol, 
-         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol)
+         heure_depart, heure_arrivee, date_vol, aeroport_depart, aeroport_arrivee, duree_vol, types_de_vol, compagnie)
         VALUES (?, ?, ?, ?, NOW(),
-          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+          ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
         [
           utilisateurId,
           flightIdInt,
@@ -196,7 +196,8 @@ app.post('/cartbillets', async (req, res) => {
           seg.from_location || seg.from || "N/A",
           seg.to_location || seg.to || "N/A",
           dureeVol,
-          type
+          type,
+          seg.airline || seg.compagnie || "Ituri Airline" // 👈 ajouté ici
         ]
       );
 
@@ -254,8 +255,8 @@ app.post('/cartbillets', async (req, res) => {
       `INSERT INTO cartbillets 
       (utilisateurs_id, flight_id, airline, departure, arrival, 
        from_location, to_location, price, date, class_text, code, 
-       seat, payment_method, email, types_de_vol, created_at)
-      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+       seat, payment_method, email, types_de_vol, created_at, compagnie)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(),?)`,
       [
         utilisateurId,
         flightIdForCart,
@@ -271,7 +272,8 @@ app.post('/cartbillets', async (req, res) => {
         data.seat || '',
         data.payment_method || 'Carte',
         data.email,
-        data.types_de_vol || ''
+        data.types_de_vol || '',
+        data.compagnie ||  'Ituri Airline'
       ]
     );
 

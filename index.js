@@ -291,7 +291,7 @@ app.post('/cartbillets', async (req, res) => {
     const writeStream = fs.createWriteStream(pdfPath);
     doc.pipe(writeStream);
 
-    doc.fontSize(20).text('Billet de Réservation - BookInPlane', { align: 'center' });
+    doc.fontSize(20).text('Billet de Réservation - BookInPlane - Ituri Airline', { align: 'center' });
     doc.moveDown();
 
     doc.fontSize(12)

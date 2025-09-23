@@ -552,7 +552,6 @@ app.post('/add', async (req, res) => {
       vols, // [{vol_id, classe_id, ...}]
     } = req.body;
 
-    // ✅ Vérif minimale
     if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
       return res.status(400).json({
         error: "Champs obligatoires manquants ou vols vides",
@@ -568,7 +567,6 @@ app.post('/add', async (req, res) => {
         });
       });
 
-    // ✅ Formatage dates
     const formatDate = (d) => {
       if (!d) return null;
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -590,29 +588,31 @@ app.post('/add', async (req, res) => {
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // ✅ 1. Insertion ou mise à jour utilisateur
-    const insertUser = await query(
-      `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
-       VALUES (?, ?, ?, ?, NOW())
-       ON DUPLICATE KEY UPDATE 
-         nom = VALUES(nom),
-         prenom = VALUES(prenom),
-         telephone = VALUES(telephone)`,
-      [nom || null, prenom || null, telephone || null, email.trim()]
-    );
-
+    // ✅ 1. Vérifier si l’utilisateur existe
     let utilisateur_id;
-    if (insertUser.insertId && insertUser.insertId > 0) {
-      utilisateur_id = insertUser.insertId;
+    const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
+
+    if (existing.length > 0) {
+      // utilisateur existe → update ses infos
+      utilisateur_id = existing[0].id;
+      await query(
+        `UPDATE utilisateurs 
+         SET nom = ?, prenom = ?, telephone = ?, ville = ?, pays = ?, adresse = ?
+         WHERE id = ?`,
+        [nom || null, prenom || null, telephone || null, ville || null, pays || null, adresse || null, utilisateur_id]
+      );
     } else {
-      const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
-      utilisateur_id = existing[0]?.id;
+      // nouvel utilisateur → insertion
+      const insertUser = await query(
+        `INSERT INTO utilisateurs (nom, prenom, telephone, email, ville, pays, adresse, date_inscription) 
+         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+        [nom || null, prenom || null, telephone || null, email.trim(), ville || null, pays || null, adresse || null]
+      );
+      utilisateur_id = insertUser.insertId;
     }
 
     if (!utilisateur_id) {
-      return res.status(500).json({
-        error: "Impossible de récupérer ou créer l'utilisateur",
-      });
+      return res.status(500).json({ error: "Impossible de créer ou mettre à jour l'utilisateur" });
     }
 
     // ✅ 2. Insertion des réservations
@@ -673,7 +673,6 @@ app.post('/add', async (req, res) => {
       await query(sqlReservation, values);
     }
 
-    // ✅ Réponse succès
     res.json({
       message: "Réservations enregistrées avec succès ✅",
       email,
@@ -687,7 +686,8 @@ app.post('/add', async (req, res) => {
       details: err.sqlMessage || err.message,
     });
   }
-}); 
+});
+
 /*
 app.post('/add', async (req, res) => {
   console.log('📥 Requête reçue sur /add');

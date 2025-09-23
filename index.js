@@ -536,7 +536,16 @@ app.get('/reservationslist', (req, res) => {
 // Réservation
 // Réservation multiple (oneway, roundtrip, multicity)
 app.post('/add', async (req, res) => {
+  console.log('📥 Requête reçue sur /add');
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  
   try {
+    // Vérification DB
+    if (!db) {
+      console.error('❌ DB non connectée');
+      return res.status(500).json({ error: "Base de données non connectée" });
+    }
+
     const {
       nom,
       prenom,
@@ -549,26 +558,40 @@ app.post('/add', async (req, res) => {
       passeport,
       expiration_passeport,
       place_selectionnee,
-      vols, // [{vol_id, classe_id, ...}]
+      vols = [],
     } = req.body;
 
-    // ✅ Vérif minimale
-    if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
+    // ✅ Vérification plus détaillée
+    if (!nom || !email) {
       return res.status(400).json({
-        error: "Champs obligatoires manquants ou vols vides",
+        error: "Nom et email sont obligatoires",
       });
     }
 
-    // ✅ Helper query
+    if (!Array.isArray(vols) || vols.length === 0) {
+      return res.status(400).json({
+        error: "Au moins un vol est requis",
+      });
+    }
+
+    // Helper query avec logging
     const query = (sql, params) =>
       new Promise((resolve, reject) => {
+        console.log('🔍 Exécution SQL:', sql.substring(0, 100) + '...');
+        console.log('📋 Params:', params);
+        
         db.query(sql, params, (err, results) => {
-          if (err) reject(err);
-          else resolve(results);
+          if (err) {
+            console.error('❌ Erreur SQL:', err);
+            reject(err);
+          } else {
+            console.log('✅ Résultat SQL:', results);
+            resolve(results);
+          }
         });
       });
 
-    // ✅ Formatage dates
+    // Formatage dates (votre code existant)
     const formatDate = (d) => {
       if (!d) return null;
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -590,7 +613,8 @@ app.post('/add', async (req, res) => {
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // ✅ 1. Insertion ou mise à jour utilisateur
+    // ✅ 1. Insertion utilisateur
+    console.log('👤 Insertion utilisateur...');
     const insertUser = await query(
       `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
        VALUES (?, ?, ?, ?, NOW())
@@ -604,9 +628,11 @@ app.post('/add', async (req, res) => {
     let utilisateur_id;
     if (insertUser.insertId && insertUser.insertId > 0) {
       utilisateur_id = insertUser.insertId;
+      console.log('✅ Nouvel utilisateur ID:', utilisateur_id);
     } else {
       const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
       utilisateur_id = existing[0]?.id;
+      console.log('✅ Utilisateur existant ID:', utilisateur_id);
     }
 
     if (!utilisateur_id) {
@@ -616,6 +642,7 @@ app.post('/add', async (req, res) => {
     }
 
     // ✅ 2. Insertion des réservations
+    console.log('🎫 Insertion des réservations...');
     for (const vol of vols) {
       const {
         vol_id,
@@ -631,7 +658,10 @@ app.post('/add', async (req, res) => {
         time,
       } = vol;
 
-      if (!vol_id || !classe_id) continue;
+      if (!vol_id || !classe_id) {
+        console.warn('⚠️ Vol ignoré - vol_id ou classe_id manquant:', vol);
+        continue;
+      }
 
       const values = [
         utilisateur_id,
@@ -671,20 +701,24 @@ app.post('/add', async (req, res) => {
       `;
 
       await query(sqlReservation, values);
+      console.log('✅ Réservation créée pour le vol:', vol_id);
     }
 
     // ✅ Réponse succès
+    console.log('✅ Toutes les réservations créées avec succès');
     res.json({
       message: "Réservations enregistrées avec succès ✅",
       email,
       utilisateur_id,
       total_vols: vols.length,
     });
+
   } catch (err) {
-    console.error("❌ Erreur serveur:", err.sqlMessage || err.message);
+    console.error("❌ Erreur serveur:", err);
     res.status(500).json({
       error: "Erreur serveur",
       details: err.sqlMessage || err.message,
+      code: err.code
     });
   }
 });

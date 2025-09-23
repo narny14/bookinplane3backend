@@ -536,6 +536,160 @@ app.get('/reservationslist', (req, res) => {
 // Réservation
 // Réservation multiple (oneway, roundtrip, multicity)
 app.post('/add', async (req, res) => {
+  try {
+    const {
+      nom,
+      prenom,
+      telephone,
+      email,
+      adresse,
+      ville,
+      date_naissance,
+      pays,
+      passeport,
+      expiration_passeport,
+      place_selectionnee,
+      vols, // [{vol_id, classe_id, ...}]
+    } = req.body;
+
+    // ✅ Vérif minimale
+    if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
+      return res.status(400).json({
+        error: "Champs obligatoires manquants ou vols vides",
+      });
+    }
+
+    // ✅ Helper query
+    const query = (sql, params) =>
+      new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+
+    // ✅ Formatage dates
+    const formatDate = (d) => {
+      if (!d) return null;
+      if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
+      if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
+        const [j, m, a] = d.split('/');
+        return `${a}-${m.padStart(2, '0')}-${j.padStart(2, '0')}`;
+      }
+      const parsed = new Date(d);
+      return isNaN(parsed) ? null : parsed.toISOString().split('T')[0];
+    };
+
+    const formatTime = (t) => {
+      if (!t) return null;
+      if (/^\d{1,2}:\d{2}:\d{2}$/.test(t)) return t;
+      if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
+      return null;
+    };
+
+    const dateNaissanceFormatted = formatDate(date_naissance);
+    const expirationPasseportFormatted = formatDate(expiration_passeport);
+
+    // ✅ 1. Insertion ou mise à jour utilisateur
+    const insertUser = await query(
+      `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE 
+         nom = VALUES(nom),
+         prenom = VALUES(prenom),
+         telephone = VALUES(telephone)`,
+      [nom || null, prenom || null, telephone || null, email.trim()]
+    );
+
+    let utilisateur_id;
+    if (insertUser.insertId && insertUser.insertId > 0) {
+      utilisateur_id = insertUser.insertId;
+    } else {
+      const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
+      utilisateur_id = existing[0]?.id;
+    }
+
+    if (!utilisateur_id) {
+      return res.status(500).json({
+        error: "Impossible de récupérer ou créer l'utilisateur",
+      });
+    }
+
+    // ✅ 2. Insertion des réservations
+    for (const vol of vols) {
+      const {
+        vol_id,
+        classe_id,
+        airline,
+        arrival,
+        classText,
+        code,
+        departure,
+        fdate,
+        from,
+        to,
+        time,
+      } = vol;
+
+      if (!vol_id || !classe_id) continue;
+
+      const values = [
+        utilisateur_id,
+        vol_id,
+        classe_id,
+        nom,
+        email.trim(),
+        adresse || null,
+        ville || null,
+        dateNaissanceFormatted,
+        pays || null,
+        passeport || null,
+        expirationPasseportFormatted,
+        place_selectionnee || null,
+        airline || null,
+        classText || null,
+        code || null,
+        formatTime(departure),
+        formatTime(arrival),
+        formatDate(fdate),
+        from || null,
+        to || null,
+        formatTime(time),
+      ];
+
+      const sqlReservation = `
+        INSERT INTO reservations (
+          utilisateur_id, vol_id, classe_id,
+          nom, email, adresse, ville, date_naissance,
+          pays, passeport, expiration_passeport,
+          place_selectionnee,
+          airline_id, class_text, code_vol,
+          heure_depart, heure_arrivee, date_vol,
+          aeroport_depart, aeroport_arrivee, duree_vol,
+          statut
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+      `;
+
+      await query(sqlReservation, values);
+    }
+
+    // ✅ Réponse succès
+    res.json({
+      message: "Réservations enregistrées avec succès ✅",
+      email,
+      utilisateur_id,
+      total_vols: vols.length,
+    });
+  } catch (err) {
+    console.error("❌ Erreur serveur:", err.sqlMessage || err.message);
+    res.status(500).json({
+      error: "Erreur serveur",
+      details: err.sqlMessage || err.message,
+    });
+  }
+}); 
+/*
+app.post('/add', async (req, res) => {
   console.log('📥 Requête reçue sur /add');
   console.log('Body:', JSON.stringify(req.body, null, 2));
   
@@ -726,7 +880,7 @@ app.post('/add', async (req, res) => {
       code: err.code
     });
   }
-});
+});*/
 
 /*
 app.post('/add', async (req, res) => {

@@ -604,8 +604,8 @@ app.post('/add', async (req, res) => {
     } else {
       // nouvel utilisateur → insertion
       const insertUser = await query(
-        `INSERT INTO utilisateurs (nom, prenom, telephone, email, ville, pays, adresse, date_inscription) 
-         VALUES (?, ?, ?, ?, ?, ?, ?, NOW())`,
+        `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
+         VALUES ( ?, ?, ?, ?, NOW())`,
         [nom || null, prenom || null, telephone || null, email.trim(), ville || null, pays || null, adresse || null]
       );
       utilisateur_id = insertUser.insertId;

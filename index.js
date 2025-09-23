@@ -629,7 +629,6 @@ app.post('/add', async (req, res) => {
         from,
         to,
         time,
-        gates,
       } = vol;
 
       if (!vol_id || !classe_id) continue;
@@ -656,7 +655,6 @@ app.post('/add', async (req, res) => {
         from || null,
         to || null,
         formatTime(time),
-        gates || null,
       ];
 
       const sqlReservation = `
@@ -668,8 +666,8 @@ app.post('/add', async (req, res) => {
           airline_id, class_text, code_vol,
           heure_depart, heure_arrivee, date_vol,
           aeroport_depart, aeroport_arrivee, duree_vol,
-          gates, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+          statut
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
       `;
 
       await query(sqlReservation, values);
@@ -690,6 +688,7 @@ app.post('/add', async (req, res) => {
     });
   }
 });
+
 
 
 

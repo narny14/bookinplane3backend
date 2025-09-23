@@ -577,8 +577,16 @@ app.post('/add', async (req, res) => {
         });
       });
 
+    // ✅ VÉRIFICATION 1: Compter les utilisateurs AVANT insertion
+    console.log('🔍 Vérification AVANT insertion...');
+    const countBefore = await query('SELECT COUNT(*) as total FROM utilisateurs');
+    console.log('📊 Nombre d\'utilisateurs AVANT:', countBefore[0].total);
+
+    const usersBefore = await query('SELECT * FROM utilisateurs ORDER BY id DESC LIMIT 5');
+    console.log('📝 Utilisateurs AVANT:', usersBefore);
+
     // ✅ Insertion utilisateur avec ON DUPLICATE KEY UPDATE
-    console.log('👤 Insertion utilisateur...');
+    console.log('👤 Tentative d\'insertion utilisateur...');
     const insertUser = await query(
       `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
        VALUES (?, ?, ?, ?, NOW())
@@ -588,6 +596,12 @@ app.post('/add', async (req, res) => {
          telephone = VALUES(telephone)`,
       [nom || null, prenom || null, telephone || null, email.trim()]
     );
+
+    console.log('📊 Résultat insertion:', {
+      insertId: insertUser.insertId,
+      affectedRows: insertUser.affectedRows,
+      changedRows: insertUser.changedRows
+    });
 
     let utilisateur_id;
 
@@ -615,17 +629,97 @@ app.post('/add', async (req, res) => {
       }
     }
 
-    // ✅ Réponse succès
-    console.log('✅ Utilisateur traité avec succès');
+    // ✅ VÉRIFICATION 2: Compter les utilisateurs APRÈS insertion
+    console.log('🔍 Vérification APRÈS insertion...');
+    const countAfter = await query('SELECT COUNT(*) as total FROM utilisateurs');
+    console.log('📊 Nombre d\'utilisateurs APRÈS:', countAfter[0].total);
+
+    // ✅ VÉRIFICATION 3: Sélectionner SPECIFIQUEMENT l'utilisateur inséré
+    console.log('🔍 Vérification de l\'utilisateur spécifique...');
+    const userVerification = await query(
+      'SELECT * FROM utilisateurs WHERE id = ? OR email = ?', 
+      [utilisateur_id, email.trim()]
+    );
+
+    console.log('📝 Résultat vérification utilisateur:', userVerification);
+
+    if (userVerification.length === 0) {
+      console.error('❌ CRITIQUE: Utilisateur non trouvé après insertion!');
+      console.error('📌 ID recherché:', utilisateur_id);
+      console.error('📌 Email recherché:', email.trim());
+      
+      // ✅ VÉRIFICATION 4: Voir TOUS les utilisateurs pour debug
+      const allUsers = await query('SELECT * FROM utilisateurs ORDER BY id DESC');
+      console.log('🔍 TOUS les utilisateurs dans la table:', allUsers);
+      
+      return res.status(500).json({
+        error: "INSERTION ÉCHOUÉE: Utilisateur non trouvé après insertion",
+        details: {
+          utilisateur_id_recherche: utilisateur_id,
+          email_recherche: email.trim(),
+          total_utilisateurs_table: countAfter[0].total,
+          tous_utilisateurs: allUsers
+        }
+      });
+    }
+
+    // ✅ VÉRIFICATION 5: Comparer les valeurs insérées avec les valeurs réelles
+    const userInDB = userVerification[0];
+    console.log('🔍 Comparaison des valeurs:');
+    console.log('📋 Valeurs envoyées:', { nom, prenom, telephone, email: email.trim() });
+    console.log('📋 Valeurs en base:', { 
+      nom: userInDB.nom, 
+      prenom: userInDB.prenom, 
+      telephone: userInDB.telephone, 
+      email: userInDB.email 
+    });
+
+    // Vérifier si les valeurs correspondent
+    const valeursCorrespondent = 
+      userInDB.nom === nom &&
+      userInDB.prenom === prenom &&
+      userInDB.telephone === telephone &&
+      userInDB.email === email.trim();
+
+    console.log('✅ Valeurs correspondent?:', valeursCorrespondent);
+
+    // ✅ Réponse succès avec toutes les vérifications
+    console.log('✅ Utilisateur traité avec succès - Vérifications complètes');
     res.json({
       message: "Utilisateur enregistré/mis à jour avec succès ✅",
       email: email.trim(),
       utilisateur_id: utilisateur_id,
-      action: insertUser.insertId > 0 ? "créé" : "mis à jour"
+      action: insertUser.insertId > 0 ? "créé" : "mis à jour",
+      verification: {
+        valeurs_correspondent: valeursCorrespondent,
+        utilisateur_en_base: userInDB,
+        statistiques: {
+          avant_insertion: countBefore[0].total,
+          apres_insertion: countAfter[0].total,
+          difference: countAfter[0].total - countBefore[0].total
+        }
+      }
     });
 
   } catch (err) {
     console.error("❌ Erreur serveur:", err);
+    
+    // En cas d'erreur, aussi vérifier l'état de la table
+    try {
+      const query = (sql, params) => new Promise((resolve, reject) => {
+        db.query(sql, params, (err, results) => {
+          if (err) reject(err);
+          else resolve(results);
+        });
+      });
+      
+      const countError = await query('SELECT COUNT(*) as total FROM utilisateurs');
+      console.log('📊 Nombre d\'utilisateurs lors de l\'erreur:', countError[0].total);
+      
+    } catch (error) {
+      console.error('❌ Impossible de vérifier la table lors de l\'erreur:', error);
+    }
+    
     res.status(500).json({
       error: "Erreur serveur",
       details: err.sqlMessage || err.message,

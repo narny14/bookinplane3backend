@@ -550,6 +550,106 @@ app.post('/add', async (req, res) => {
       nom,
       prenom,
       telephone,
+      email
+    } = req.body;
+
+    // ✅ Vérification des champs obligatoires
+    if (!nom || !email) {
+      return res.status(400).json({
+        error: "Nom et email sont obligatoires",
+      });
+    }
+
+    // Helper query avec logging
+    const query = (sql, params) =>
+      new Promise((resolve, reject) => {
+        console.log('🔍 Exécution SQL:', sql);
+        console.log('📋 Params:', params);
+        
+        db.query(sql, params, (err, results) => {
+          if (err) {
+            console.error('❌ Erreur SQL:', err);
+            reject(err);
+          } else {
+            console.log('✅ Résultat SQL:', results);
+            resolve(results);
+          }
+        });
+      });
+
+    // ✅ Insertion utilisateur avec ON DUPLICATE KEY UPDATE
+    console.log('👤 Insertion utilisateur...');
+    const insertUser = await query(
+      `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE 
+         nom = VALUES(nom),
+         prenom = VALUES(prenom),
+         telephone = VALUES(telephone)`,
+      [nom || null, prenom || null, telephone || null, email.trim()]
+    );
+
+    let utilisateur_id;
+
+    // Gestion de l'ID utilisateur
+    if (insertUser.insertId && insertUser.insertId > 0) {
+      // Nouvel utilisateur créé
+      utilisateur_id = insertUser.insertId;
+      console.log('✅ Nouvel utilisateur créé, ID:', utilisateur_id);
+    } else {
+      // Utilisateur existant mis à jour - on doit récupérer l'ID
+      const existingUser = await query(
+        "SELECT id FROM utilisateurs WHERE email = ?", 
+        [email.trim()]
+      );
+      
+      if (existingUser.length > 0) {
+        utilisateur_id = existingUser[0].id;
+        console.log('✅ Utilisateur existant mis à jour, ID:', utilisateur_id);
+      } else {
+        // Cas d'erreur improbable
+        console.error('❌ Impossible de récupérer l\'ID utilisateur');
+        return res.status(500).json({
+          error: "Erreur lors de la récupération de l'utilisateur",
+        });
+      }
+    }
+
+    // ✅ Réponse succès
+    console.log('✅ Utilisateur traité avec succès');
+    res.json({
+      message: "Utilisateur enregistré/mis à jour avec succès ✅",
+      email: email.trim(),
+      utilisateur_id: utilisateur_id,
+      action: insertUser.insertId > 0 ? "créé" : "mis à jour"
+    });
+
+  } catch (err) {
+    console.error("❌ Erreur serveur:", err);
+    res.status(500).json({
+      error: "Erreur serveur",
+      details: err.sqlMessage || err.message,
+      code: err.code
+    });
+  }
+});
+
+/*
+app.post('/add', async (req, res) => {
+  console.log('📥 Requête reçue sur /add');
+  console.log('Body:', JSON.stringify(req.body, null, 2));
+  
+  try {
+    // Vérification DB
+    if (!db) {
+      console.error('❌ DB non connectée');
+      return res.status(500).json({ error: "Base de données non connectée" });
+    }
+
+    const {
+      nom,
+      prenom,
+      telephone,
       email,
       adresse,
       ville,
@@ -722,6 +822,7 @@ app.post('/add', async (req, res) => {
     });
   }
 });
+*/
 
 
 

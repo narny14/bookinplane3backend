@@ -1,2 +1,1 @@
-DESCRIBE reservations;
-DESCRIBE cartbillets;
+DESCRIBE utilisateurs;

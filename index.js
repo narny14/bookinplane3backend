@@ -556,7 +556,6 @@ app.post('/add', async (req, res) => {
       return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
     }
 
-    // Promisify MySQL
     const query = (sql, params) =>
       new Promise((resolve, reject) => {
         db.query(sql, params, (err, results) => {
@@ -565,12 +564,10 @@ app.post('/add', async (req, res) => {
         });
       });
 
-    // --- Format helpers ---
+    // 🔹 Helpers
     const formatDate = (d) => {
       if (!d) return null;
-      // Si déjà YYYY-MM-DD
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
-      // Si JJ/MM/AAAA
       if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
         const [jour, mois, annee] = d.split('/');
         return `${annee}-${mois.padStart(2, '0')}-${jour.padStart(2, '0')}`;
@@ -581,26 +578,30 @@ app.post('/add', async (req, res) => {
 
     const formatTime = (t) => {
       if (!t) return null;
-      // Si déjà HH:MM:SS
       if (/^\d{1,2}:\d{2}:\d{2}$/.test(t)) return t;
-      // Si HH:MM → ajouter :00
       if (/^\d{1,2}:\d{2}$/.test(t)) return t + ':00';
-      return null; // sinon NULL MySQL
+      return null;
     };
 
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // 1️⃣ Chercher ou créer utilisateur
+    // 1️⃣ Vérifier si utilisateur existe déjà
     let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
-    let utilisateur_id = utilisateurs.length
-      ? utilisateurs[0].id
-      : (await query(
-          'INSERT INTO utilisateurs (nom, prenom, telephone, email) VALUES (?, ?, ?, ?)',
-          [nom, prenom || null, telephone || null, email]
-        )).insertId;
 
-    // 2️⃣ Insertion pour chaque vol
+    let utilisateur_id;
+    if (utilisateurs.length) {
+      utilisateur_id = utilisateurs[0].id;
+    } else {
+      const insertUser = await query(
+        `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
+         VALUES (?, ?, ?, ?, NOW())`,
+        [nom, prenom || '', telephone || '', email]
+      );
+      utilisateur_id = insertUser.insertId;
+    }
+
+    // 2️⃣ Insertion réservations
     for (const vol of vols) {
       const {
         vol_id,
@@ -613,12 +614,11 @@ app.post('/add', async (req, res) => {
         fdate,
         from,
         to,
-        time,   // durée vol
+        time,
         price,
         gates
       } = vol;
 
-      // Skip si pas de vol_id ou classe_id
       if (!vol_id || !classe_id) continue;
 
       const values = [
@@ -642,7 +642,7 @@ app.post('/add', async (req, res) => {
         formatDate(fdate),
         from || null,
         to || null,
-        formatTime(time), // durée vol
+        formatTime(time),
         price || 0,
         gates || null,
       ];
@@ -664,7 +664,7 @@ app.post('/add', async (req, res) => {
     }
 
     res.json({
-      message: 'Réservations enregistrées avec succès',
+      message: 'Réservations enregistrées avec succès ✅',
       email,
       utilisateur_id,
       total_vols: vols.length
@@ -678,6 +678,7 @@ app.post('/add', async (req, res) => {
     });
   }
 });
+
 
 /*app.post('/add', async (req, res) => {
   try {

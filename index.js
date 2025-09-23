@@ -552,10 +552,12 @@ app.post('/add', async (req, res) => {
       vols, // [{vol_id, classe_id, airline, ...}]
     } = req.body;
 
+    // Vérification minimale
     if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
       return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
     }
 
+    // Helper pour exécuter des requêtes
     const query = (sql, params) =>
       new Promise((resolve, reject) => {
         db.query(sql, params, (err, results) => {
@@ -564,7 +566,7 @@ app.post('/add', async (req, res) => {
         });
       });
 
-    // 🔹 Helpers
+    // Helpers pour formatage
     const formatDate = (d) => {
       if (!d) return null;
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
@@ -586,22 +588,31 @@ app.post('/add', async (req, res) => {
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // 1️⃣ Vérifier si utilisateur existe déjà
-    let utilisateurs = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
+    // 1️⃣ Insertion ou mise à jour utilisateur
+    const insertUser = await query(
+      `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
+       VALUES (?, ?, ?, ?, NOW())
+       ON DUPLICATE KEY UPDATE 
+         nom = VALUES(nom),
+         prenom = VALUES(prenom),
+         telephone = VALUES(telephone)`,
+      [nom || null, prenom || null, telephone || null, email || null]
+    );
 
+    // Récupérer l’ID utilisateur (nouvel insert ou existant)
     let utilisateur_id;
-    if (utilisateurs.length) {
-      utilisateur_id = utilisateurs[0].id;
-    } else {
-      const insertUser = await query(
-        `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
-         VALUES (?, ?, ?, ?, NOW())`,
-        [nom, prenom || '', telephone || '', email]
-      );
+    if (insertUser.insertId && insertUser.insertId > 0) {
       utilisateur_id = insertUser.insertId;
+    } else {
+      const existing = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
+      utilisateur_id = existing[0]?.id;
     }
 
-    // 2️⃣ Insertion réservations
+    if (!utilisateur_id) {
+      return res.status(500).json({ error: "Impossible de récupérer l'utilisateur" });
+    }
+
+    // 2️⃣ Insertion des réservations
     for (const vol of vols) {
       const {
         vol_id,
@@ -663,6 +674,7 @@ app.post('/add', async (req, res) => {
       await query(sqlReservation, values);
     }
 
+    // ✅ Réponse finale
     res.json({
       message: 'Réservations enregistrées avec succès ✅',
       email,
@@ -671,13 +683,14 @@ app.post('/add', async (req, res) => {
     });
 
   } catch (err) {
-    console.error('Erreur serveur :', err);
+    console.error('Erreur serveur :', err.sqlMessage || err.message);
     res.status(500).json({
       error: 'Erreur serveur',
-      details: err.message,
+      details: err.sqlMessage || err.message,
     });
   }
 });
+
 
 
 /*app.post('/add', async (req, res) => {

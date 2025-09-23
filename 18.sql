@@ -1,1 +1,1 @@
-DESCRIBE utilisateurs;
+DESCRIBE reservations;

@@ -629,7 +629,6 @@ app.post('/add', async (req, res) => {
         from,
         to,
         time,
-        price,
         gates,
       } = vol;
 
@@ -657,7 +656,6 @@ app.post('/add', async (req, res) => {
         from || null,
         to || null,
         formatTime(time),
-        price || 0,
         gates || null,
       ];
 
@@ -670,8 +668,8 @@ app.post('/add', async (req, res) => {
           airline_id, class_text, code_vol,
           heure_depart, heure_arrivee, date_vol,
           aeroport_depart, aeroport_arrivee, duree_vol,
-          prix, gates, statut
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
+          gates, statut
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'Réservé')
       `;
 
       await query(sqlReservation, values);
@@ -692,6 +690,7 @@ app.post('/add', async (req, res) => {
     });
   }
 });
+
 
 
 

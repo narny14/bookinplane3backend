@@ -518,7 +518,7 @@ app.get('/reservationslist', (req, res) => {
 
   const sql = `
     SELECT * FROM reservations 
-    WHERE email = ? 
+    WHERE email = ? AND utilisateur_id = ? 
     ORDER BY date_reservation DESC
   `;
 

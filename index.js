@@ -549,15 +549,17 @@ app.post('/add', async (req, res) => {
       passeport,
       expiration_passeport,
       place_selectionnee,
-      vols, // [{vol_id, classe_id, airline, ...}]
+      vols, // [{vol_id, classe_id, ...}]
     } = req.body;
 
-    // Vérification minimale
+    // ✅ Vérif minimale
     if (!nom || !email || !Array.isArray(vols) || vols.length === 0) {
-      return res.status(400).json({ error: 'Champs obligatoires manquants ou vols vides' });
+      return res.status(400).json({
+        error: "Champs obligatoires manquants ou vols vides",
+      });
     }
 
-    // Helper pour exécuter des requêtes
+    // ✅ Helper query
     const query = (sql, params) =>
       new Promise((resolve, reject) => {
         db.query(sql, params, (err, results) => {
@@ -566,13 +568,13 @@ app.post('/add', async (req, res) => {
         });
       });
 
-    // Helpers pour formatage
+    // ✅ Formatage dates
     const formatDate = (d) => {
       if (!d) return null;
       if (/^\d{4}-\d{2}-\d{2}$/.test(d)) return d;
       if (/^\d{1,2}\/\d{1,2}\/\d{4}$/.test(d)) {
-        const [jour, mois, annee] = d.split('/');
-        return `${annee}-${mois.padStart(2, '0')}-${jour.padStart(2, '0')}`;
+        const [j, m, a] = d.split('/');
+        return `${a}-${m.padStart(2, '0')}-${j.padStart(2, '0')}`;
       }
       const parsed = new Date(d);
       return isNaN(parsed) ? null : parsed.toISOString().split('T')[0];
@@ -588,7 +590,7 @@ app.post('/add', async (req, res) => {
     const dateNaissanceFormatted = formatDate(date_naissance);
     const expirationPasseportFormatted = formatDate(expiration_passeport);
 
-    // 1️⃣ Insertion ou mise à jour utilisateur
+    // ✅ 1. Insertion ou mise à jour utilisateur
     const insertUser = await query(
       `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
        VALUES (?, ?, ?, ?, NOW())
@@ -596,23 +598,24 @@ app.post('/add', async (req, res) => {
          nom = VALUES(nom),
          prenom = VALUES(prenom),
          telephone = VALUES(telephone)`,
-      [nom || null, prenom || null, telephone || null, email || null]
+      [nom || null, prenom || null, telephone || null, email.trim()]
     );
 
-    // Récupérer l’ID utilisateur (nouvel insert ou existant)
     let utilisateur_id;
     if (insertUser.insertId && insertUser.insertId > 0) {
       utilisateur_id = insertUser.insertId;
     } else {
-      const existing = await query('SELECT id FROM utilisateurs WHERE email = ?', [email]);
+      const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
       utilisateur_id = existing[0]?.id;
     }
 
     if (!utilisateur_id) {
-      return res.status(500).json({ error: "Impossible de récupérer l'utilisateur" });
+      return res.status(500).json({
+        error: "Impossible de récupérer ou créer l'utilisateur",
+      });
     }
 
-    // 2️⃣ Insertion des réservations
+    // ✅ 2. Insertion des réservations
     for (const vol of vols) {
       const {
         vol_id,
@@ -627,7 +630,7 @@ app.post('/add', async (req, res) => {
         to,
         time,
         price,
-        gates
+        gates,
       } = vol;
 
       if (!vol_id || !classe_id) continue;
@@ -637,7 +640,7 @@ app.post('/add', async (req, res) => {
         vol_id,
         classe_id,
         nom,
-        email,
+        email.trim(),
         adresse || null,
         ville || null,
         dateNaissanceFormatted,
@@ -674,22 +677,22 @@ app.post('/add', async (req, res) => {
       await query(sqlReservation, values);
     }
 
-    // ✅ Réponse finale
+    // ✅ Réponse succès
     res.json({
-      message: 'Réservations enregistrées avec succès ✅',
+      message: "Réservations enregistrées avec succès ✅",
       email,
       utilisateur_id,
-      total_vols: vols.length
+      total_vols: vols.length,
     });
-
   } catch (err) {
-    console.error('Erreur serveur :', err.sqlMessage || err.message);
+    console.error("❌ Erreur serveur:", err.sqlMessage || err.message);
     res.status(500).json({
-      error: 'Erreur serveur',
+      error: "Erreur serveur",
       details: err.sqlMessage || err.message,
     });
   }
 });
+
 
 
 

@@ -37,6 +37,7 @@ console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, proce
 // ====================== ROUTES =======================
 
 // Liste des aéroports
+/*
 app.get('/api/aeroports', (req, res) => {
   const sql = `
     SELECT id, code_iata, ville, pays, nom
@@ -48,7 +49,7 @@ app.get('/api/aeroports', (req, res) => {
 
     res.json(result);
   });
-});
+});*/
 
 
 
@@ -1721,4 +1722,9 @@ app.post('/api/search-vols-dispo', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);
+});
+// Middleware global pour capter les erreurs Express
+app.use((err, req, res, next) => {
+  console.error("🔥 Erreur Express :", err.stack || err); // => visible dans Render logs
+  res.status(500).json({ error: "Erreur interne du serveur" });
 });

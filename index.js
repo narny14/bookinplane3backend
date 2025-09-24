@@ -91,23 +91,26 @@ app.get('/api/vols/:id', (req, res) => {
 
 // Route pour lire la liste des aéroports
 // GET /airports : liste unique des villes d’aéroports en RDC
-app.get('/airports', (req, res) => {
+// Liste complète des aéroports (avec label/value + détails)
+app.get('/api/aeroports', (req, res) => {
   const sql = `
-    SELECT DISTINCT ville AS label, ville AS value
+    SELECT 
+      id,
+      code_iata,
+      ville,
+      pays,
+      nom,
+      ville AS label,   -- utile pour affichage rapide
+      ville AS value    -- utile pour FlatList / Picker
     FROM aeroports
-    WHERE pays = 'RDC'
-    ORDER BY ville ASC
+    ORDER BY ville COLLATE utf8_general_ci ASC
   `;
-
-  db.query(sql, (err, results) => {
-    if (err) {
-  console.error('❌ Erreur récupération aéroports :', err);
-  return res.status(500).json({ error: err.message });
-}
-
-    res.json(results);
+  db.query(sql, (err, result) => {
+    if (err) return res.status(500).json({ error: err.message });
+    res.json(result);
   });
 });
+
 
 const fs = require('fs');
 const PDFDocument = require('pdfkit');

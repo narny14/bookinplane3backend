@@ -2,6 +2,8 @@ const express = require('express');
 const mysql = require('mysql2');
 const dotenv = require('dotenv');
 const cors = require('cors');
+const compression = require('compression');
+app.use(compression());
 
 dotenv.config();
 
@@ -36,11 +38,19 @@ console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, proce
 
 // Liste des aéroports
 app.get('/api/aeroports', (req, res) => {
-  db.query('SELECT * FROM aeroports', (err, result) => {
+  const sql = `
+    SELECT id, code_iata, ville, pays, nom
+    FROM aeroports
+    ORDER BY ville COLLATE utf8_general_ci ASC
+  `;
+  db.query(sql, (err, result) => {
     if (err) return res.status(500).json({ error: err.message });
+
     res.json(result);
   });
 });
+
+
 
 // Liste des vols disponibles
 app.get('/api/vols', (req, res) => {

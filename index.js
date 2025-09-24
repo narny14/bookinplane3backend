@@ -3,13 +3,13 @@ const mysql = require('mysql2');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const compression = require('compression');
-app.use(compression());
+
 
 dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-
+app.use(compression()); // ✅ maintenant c’est bon
 app.use(cors());
 app.use(express.json());
 

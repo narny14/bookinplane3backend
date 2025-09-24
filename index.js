@@ -9,7 +9,7 @@ dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 5000;
-app.use(compression()); // ✅ maintenant c’est bon
+app.use(compression());
 app.use(cors());
 app.use(express.json());
 
@@ -37,19 +37,30 @@ console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, proce
 // ====================== ROUTES =======================
 
 // Liste des aéroports
-/*
-app.get('/api/aeroports', (req, res) => {
+app.get('/api/aeroports', (req, res, next) => {
   const sql = `
-    SELECT id, code_iata, ville, pays, nom
+    SELECT 
+      id,
+      code_iata,
+      ville,
+      pays,
+      nom,
+      ville AS label,
+      ville AS value
     FROM aeroports
     ORDER BY ville COLLATE utf8_general_ci ASC
   `;
-  db.query(sql, (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
 
+  db.query(sql, (err, result) => {
+    if (err) {
+      console.error("🔥 Erreur MySQL /api/aeroports :", err); // visible Render logs
+      return next(err); // passera au middleware global
+    }
+    console.log("✅ /api/aeroports retourné avec", result.length, "enregistrements");
     res.json(result);
   });
-});*/
+});
+
 
 
 
@@ -92,31 +103,23 @@ app.get('/api/vols/:id', (req, res) => {
 
 // Route pour lire la liste des aéroports
 // GET /airports : liste unique des villes d’aéroports en RDC
-// Liste complète des aéroports (avec label/value + détails)
-app.get('/api/aeroports', (req, res) => {
+app.get('/airports', (req, res) => {
   const sql = `
-    SELECT 
-      id,
-      code_iata,
-      ville,
-      pays,
-      nom,
-      ville AS label,
-      ville AS value
+    SELECT DISTINCT ville AS label, ville AS value
     FROM aeroports
-    ORDER BY ville COLLATE utf8_general_ci ASC
+    WHERE pays = 'RDC'
+    ORDER BY ville ASC
   `;
 
-  db.query(sql, (err, result) => {
+  db.query(sql, (err, results) => {
     if (err) {
-      console.error("🔥 Erreur MySQL /api/aeroports :", err); // Visible dans Render logs
-      return res.status(500).json({ error: "Erreur serveur : " + err.message });
-    }
-    res.json(result);
+  console.error('❌ Erreur récupération aéroports :', err);
+  return res.status(500).json({ error: err.message });
+}
+
+    res.json(results);
   });
 });
-
-
 
 const fs = require('fs');
 const PDFDocument = require('pdfkit');
@@ -1722,9 +1725,4 @@ app.post('/api/search-vols-dispo', (req, res) => {
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);
-});
-// Middleware global pour capter les erreurs Express
-app.use((err, req, res, next) => {
-  console.error("🔥 Erreur Express :", err.stack || err); // => visible dans Render logs
-  res.status(500).json({ error: "Erreur interne du serveur" });
 });

@@ -592,24 +592,46 @@ app.post('/add', async (req, res) => {
     let utilisateur_id;
     const existing = await query("SELECT id FROM utilisateurs WHERE email = ?", [email.trim()]);
 
-    if (existing.length > 0) {
-      // utilisateur existe → update ses infos
-      utilisateur_id = existing[0].id;
-      await query(
-        `UPDATE utilisateurs 
-         SET nom = ?, prenom = ?, telephone = ?, ville = ?, pays = ?, adresse = ?
-         WHERE id = ?`,
-        [nom || null, prenom || null, telephone || null, ville || null, pays || null, adresse || null, utilisateur_id]
-      );
-    } else {
-      // nouvel utilisateur → insertion
-      const insertUser = await query(
-        `INSERT INTO utilisateurs (nom, prenom, telephone, email, date_inscription) 
-         VALUES ( ?, ?, ?, ?, NOW())`,
-        [nom || null, prenom || null, telephone || null, email.trim(), ville || null, pays || null, adresse || null]
-      );
-      utilisateur_id = insertUser.insertId;
-    }
+    // Insertion ou mise à jour utilisateur
+if (existing.length > 0) {
+  // utilisateur existe → update
+  utilisateur_id = existing[0].id;
+  await query(
+    `UPDATE utilisateurs 
+     SET nom = ?, prenom = ?, telephone = ?, ville = ?, pays = ?, adresse = ?, date_naissance = ?, expiration_passeport = ?
+     WHERE id = ?`,
+    [
+      nom || null,
+      prenom || null,
+      telephone || null,
+      ville || null,
+      pays || null,
+      adresse || null,
+      dateNaissanceFormatted,
+      expirationPasseportFormatted,
+      utilisateur_id,
+    ]
+  );
+} else {
+  // nouvel utilisateur → insertion
+  const insertUser = await query(
+    `INSERT INTO utilisateurs (nom, prenom, telephone, email, ville, adresse, pays, date_naissance, expiration_passeport, date_inscription) 
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW())`,
+    [
+      nom || null,
+      prenom || null,
+      telephone || null,
+      email.trim(),
+      ville || null,
+      adresse || null,
+      pays || null,
+      dateNaissanceFormatted,
+      expirationPasseportFormatted,
+    ]
+  );
+  utilisateur_id = insertUser.insertId;
+}
+
 
     if (!utilisateur_id) {
       return res.status(500).json({ error: "Impossible de créer ou mettre à jour l'utilisateur" });
@@ -687,6 +709,7 @@ app.post('/add', async (req, res) => {
     });
   }
 });
+
 
 /*
 app.post('/add', async (req, res) => {

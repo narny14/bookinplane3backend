@@ -48,18 +48,18 @@ app.get('/api/aeroports', (req, res, next) => {
       ville AS label,
       ville AS value
     FROM aeroports
-    ORDER BY ville COLLATE utf8_general_ci ASC
+    ORDER BY ville COLLATE utf8mb4_general_ci ASC
   `;
 
   db.query(sql, (err, result) => {
     if (err) {
-      console.error("🔥 Erreur MySQL /api/aeroports :", err); // visible Render logs
-      return next(err); // passera au middleware global
+      console.error("🔥 Erreur MySQL /api/aeroports :", err);
+      return next(err);
     }
-    console.log("✅ /api/aeroports retourné avec", result.length, "enregistrements");
     res.json(result);
   });
 });
+
 
 
 

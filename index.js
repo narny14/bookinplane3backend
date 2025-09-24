@@ -100,16 +100,21 @@ app.get('/api/aeroports', (req, res) => {
       ville,
       pays,
       nom,
-      ville AS label,   -- utile pour affichage rapide
-      ville AS value    -- utile pour FlatList / Picker
+      ville AS label,
+      ville AS value
     FROM aeroports
     ORDER BY ville COLLATE utf8_general_ci ASC
   `;
+
   db.query(sql, (err, result) => {
-    if (err) return res.status(500).json({ error: err.message });
+    if (err) {
+      console.error("🔥 Erreur MySQL /api/aeroports :", err); // Visible dans Render logs
+      return res.status(500).json({ error: "Erreur serveur : " + err.message });
+    }
     res.json(result);
   });
 });
+
 
 
 const fs = require('fs');

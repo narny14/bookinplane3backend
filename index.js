@@ -133,6 +133,7 @@ app.post('/cartbillets', async (req, res) => {
   console.log('Données reçues:', JSON.stringify(data, null, 2));
 
   let pdfPath = null;
+  const fs = require("fs"); // Déplacer fs en haut pour être accessible dans le catch
 
   try {
     if (!data.email) {
@@ -276,13 +277,14 @@ app.post('/cartbillets', async (req, res) => {
     // 5️⃣ Génération PDF + Email en arrière-plan (async)
     setImmediate(async () => {
       try {
-        const fs = require("fs");
         const path = require("path");
         const PDFDocument = require("pdfkit");
         const nodemailer = require("nodemailer");
 
         pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
-        if (!fs.existsSync(path.join(__dirname, 'temp'))) fs.mkdirSync(path.join(__dirname, 'temp'));
+        if (!fs.existsSync(path.join(__dirname, 'temp'))) {
+          fs.mkdirSync(path.join(__dirname, 'temp'));
+        }
 
         const doc = new PDFDocument();
         const writeStream = fs.createWriteStream(pdfPath);
@@ -306,7 +308,8 @@ app.post('/cartbillets', async (req, res) => {
           }
         });
 
-        await transporter.sendMail({
+        // CORRECTION : Définir info avant de l'utiliser
+        const info = await transporter.sendMail({
           from: `"BookInPlane" <${process.env.SMTP_USER || "spencermimo@gmail.com"}>`,
           to: data.email,
           subject: "Votre billet de voyage BookInPlane",
@@ -314,22 +317,41 @@ app.post('/cartbillets', async (req, res) => {
           attachments: [{ filename: `billet-${data.code}.pdf`, path: pdfPath }]
         });
 
+        console.log("📧 Email envoyé ID:", info.messageId);
         console.log("✅ Email envoyé avec succès");
 
-        try { fs.unlinkSync(pdfPath); } catch {}
+        // Nettoyer le fichier PDF temporaire
+        try { 
+          fs.unlinkSync(pdfPath); 
+        } catch (cleanupErr) {
+          console.warn("⚠️ Impossible de supprimer le fichier temporaire:", cleanupErr.message);
+        }
+
       } catch (err) {
         console.error("❌ Erreur envoi email async:", err.message);
+        // Nettoyer en cas d'erreur
+        if (pdfPath && fs.existsSync(pdfPath)) {
+          try {
+            fs.unlinkSync(pdfPath);
+          } catch (cleanupErr) {
+            console.warn("⚠️ Impossible de supprimer le fichier temporaire après erreur:", cleanupErr.message);
+          }
+        }
       }
     });
 
   } catch (err) {
     console.error("❌ Erreur principale:", err.message);
-    if (pdfPath && fs.existsSync(pdfPath)) fs.unlinkSync(pdfPath);
+    if (pdfPath && fs.existsSync(pdfPath)) {
+      try {
+        fs.unlinkSync(pdfPath);
+      } catch (cleanupErr) {
+        console.warn("⚠️ Impossible de supprimer le fichier temporaire après erreur:", cleanupErr.message);
+      }
+    }
     res.status(500).json({ message: "Erreur serveur", error: err.message });
   }
 });
-
-
 /*
 app.post('/cartbillets', async (req, res) => {
   const data = req.body;

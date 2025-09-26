@@ -133,7 +133,8 @@ app.post('/cartbillets', async (req, res) => {
   console.log('Données reçues:', JSON.stringify(data, null, 2));
 
   let pdfPath = null;
-  const fs = require("fs"); // Déplacer fs en haut pour être accessible dans le catch
+  const fs = require("fs");
+  const path = require("path");
 
   try {
     if (!data.email) {
@@ -276,66 +277,166 @@ app.post('/cartbillets', async (req, res) => {
 
     // 5️⃣ Génération PDF + Email en arrière-plan (async)
     setImmediate(async () => {
+      let emailTransporter = null;
       try {
-        const path = require("path");
         const PDFDocument = require("pdfkit");
         const nodemailer = require("nodemailer");
 
-        pdfPath = path.join(__dirname, 'temp', `billet-${data.code}-${Date.now()}.pdf`);
-        if (!fs.existsSync(path.join(__dirname, 'temp'))) {
-          fs.mkdirSync(path.join(__dirname, 'temp'));
+        // Créer le dossier temp s'il n'existe pas
+        const tempDir = path.join(__dirname, 'temp');
+        if (!fs.existsSync(tempDir)) {
+          fs.mkdirSync(tempDir, { recursive: true });
         }
 
-        const doc = new PDFDocument();
+        pdfPath = path.join(tempDir, `billet-${data.code}-${Date.now()}.pdf`);
+
+        // Génération du PDF améliorée
+        const doc = new PDFDocument({ margin: 50 });
         const writeStream = fs.createWriteStream(pdfPath);
         doc.pipe(writeStream);
 
-        doc.fontSize(20).text('Billet de Réservation - BookInPlane', { align: 'center' });
-        doc.text(`Passager: ${data.nom || ''} (${data.email})`);
-        doc.text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`);
+        // Contenu du PDF
+        doc.fontSize(20).font('Helvetica-Bold')
+           .text('Billet de Réservation - BookInPlane', { align: 'center' })
+           .moveDown(0.5);
+        
+        doc.fontSize(12).font('Helvetica')
+           .text(`Passager: ${data.nom || 'Non spécifié'} ${data.prenom || ''}`)
+           .text(`Email: ${data.email}`)
+           .text(`Vol: ${data.from_location || ''} → ${data.to_location || ''}`)
+           .text(`Date: ${data.date || 'Non spécifié'}`)
+           .text(`Prix: ${data.price || 0} ${data.currency || 'USD'}`)
+           .text(`Classe: ${data.class_text || 'Economy'}`)
+           .text(`Code réservation: ${data.code || 'N/A'}`)
+           .moveDown(1)
+           .text('Merci pour votre confiance !', { align: 'center' });
+
         doc.end();
 
-        await new Promise((resolve) => writeStream.on('finish', resolve));
+        await new Promise((resolve, reject) => {
+          writeStream.on('finish', resolve);
+          writeStream.on('error', reject);
+        });
 
-        // Transporter Gmail
-        const transporter = nodemailer.createTransport({
+        console.log('✅ PDF généré:', pdfPath);
+
+        // Configuration SMTP améliorée
+        const smtpConfig = {
+          host: "smtp.gmail.com",
+          port: 587, // Essayer le port 587 d'abord (TLS)
+          secure: false, // true pour 465, false pour 587
+          auth: {
+            user: process.env.SMTP_USER || "spencermimo@gmail.com",
+            pass: process.env.SMTP_PASS || "votre_mot_de_passe_app" // Utiliser un mot de passe d'application Gmail
+          },
+          tls: {
+            rejectUnauthorized: false
+          }
+        };
+
+        // Alternative si le port 587 ne marche pas
+        const smtpConfigAlt = {
           host: "smtp.gmail.com",
           port: 465,
           secure: true,
           auth: {
             user: process.env.SMTP_USER || "spencermimo@gmail.com",
-            pass: process.env.SMTP_PASS || "ton_mot_de_passe_app"
+            pass: process.env.SMTP_PASS || "votre_mot_de_passe_app"
           }
+        };
+
+        emailTransporter = nodemailer.createTransport(smtpConfig);
+
+        // Tester la connexion SMTP
+        await emailTransporter.verify().then(() => {
+          console.log('✅ Serveur SMTP prêt');
+        }).catch(async (error) => {
+          console.log('❌ Essai port 587 échoué, tentative port 465...', error.message);
+          emailTransporter = nodemailer.createTransport(smtpConfigAlt);
+          await emailTransporter.verify();
+          console.log('✅ Serveur SMTP prêt (port 465)');
         });
 
-        // CORRECTION : Définir info avant de l'utiliser
-        const info = await transporter.sendMail({
+        // Contenu HTML amélioré
+        const htmlContent = `
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <style>
+              body { font-family: Arial, sans-serif; color: #333; }
+              .header { background: #1a73e8; color: white; padding: 20px; text-align: center; }
+              .content { padding: 20px; }
+              .footer { background: #f5f5f5; padding: 15px; text-align: center; font-size: 12px; }
+            </style>
+          </head>
+          <body>
+            <div class="header">
+              <h1>BookInPlane - Confirmation de Réservation</h1>
+            </div>
+            <div class="content">
+              <h2>Bonjour ${data.nom || 'Cher client'},</h2>
+              <p>Votre réservation a été confirmée avec succès.</p>
+              <h3>Détails du vol:</h3>
+              <ul>
+                <li><strong>Passager:</strong> ${data.nom || ''} ${data.prenom || ''}</li>
+                <li><strong>Vol:</strong> ${data.from_location || ''} → ${data.to_location || ''}</li>
+                <li><strong>Date:</strong> ${data.date || ''}</li>
+                <li><strong>Classe:</strong> ${data.class_text || 'Economy'}</li>
+                <li><strong>Prix:</strong> ${data.price || 0} ${data.currency || 'USD'}</li>
+                <li><strong>Code réservation:</strong> ${data.code || 'N/A'}</li>
+              </ul>
+              <p>Votre billet est attaché à cet email.</p>
+            </div>
+            <div class="footer">
+              <p>BookInPlane - Service Client</p>
+              <p>Email: support@bookinplane.com</p>
+            </div>
+          </body>
+          </html>
+        `;
+
+        // Envoi de l'email
+        const mailOptions = {
           from: `"BookInPlane" <${process.env.SMTP_USER || "spencermimo@gmail.com"}>`,
           to: data.email,
-          subject: "Votre billet de voyage BookInPlane",
-          html: `<h2>Confirmation de réservation</h2><p>Bonjour ${data.nom || "Passager"},</p><p>Votre billet est en pièce jointe.</p>`,
-          attachments: [{ filename: `billet-${data.code}.pdf`, path: pdfPath }]
-        });
+          subject: `Votre billet de voyage - ${data.code || 'Réservation BookInPlane'}`,
+          html: htmlContent,
+          attachments: [{
+            filename: `billet-${data.code || 'reservation'}.pdf`,
+            path: pdfPath,
+            contentType: 'application/pdf'
+          }]
+        };
 
-        console.log("📧 Email envoyé ID:", info.messageId);
-        console.log("✅ Email envoyé avec succès");
-
-        // Nettoyer le fichier PDF temporaire
-        try { 
-          fs.unlinkSync(pdfPath); 
-        } catch (cleanupErr) {
-          console.warn("⚠️ Impossible de supprimer le fichier temporaire:", cleanupErr.message);
-        }
+        const info = await emailTransporter.sendMail(mailOptions);
+        console.log("📧 Email envoyé avec succès - Message ID:", info.messageId);
+        console.log("✅ Email accepté par:", info.accepted);
 
       } catch (err) {
-        console.error("❌ Erreur envoi email async:", err.message);
-        // Nettoyer en cas d'erreur
+        console.error("❌ Erreur détaillée envoi email:", err);
+        
+        // Log détaillé pour debugging
+        if (err.code) {
+          console.error("Code erreur:", err.code);
+        }
+        if (err.response) {
+          console.error("Réponse SMTP:", err.response);
+        }
+        
+      } finally {
+        // Nettoyage du fichier PDF
         if (pdfPath && fs.existsSync(pdfPath)) {
           try {
             fs.unlinkSync(pdfPath);
+            console.log('✅ Fichier temporaire supprimé');
           } catch (cleanupErr) {
-            console.warn("⚠️ Impossible de supprimer le fichier temporaire après erreur:", cleanupErr.message);
+            console.warn("⚠️ Impossible de supprimer le fichier temporaire:", cleanupErr.message);
           }
+        }
+        
+        // Fermer la connexion SMTP
+        if (emailTransporter) {
+          emailTransporter.close();
         }
       }
     });
@@ -346,7 +447,7 @@ app.post('/cartbillets', async (req, res) => {
       try {
         fs.unlinkSync(pdfPath);
       } catch (cleanupErr) {
-        console.warn("⚠️ Impossible de supprimer le fichier temporaire après erreur:", cleanupErr.message);
+        console.warn("⚠️ Impossible de supprimer le fichier temporaire:", cleanupErr.message);
       }
     }
     res.status(500).json({ message: "Erreur serveur", error: err.message });

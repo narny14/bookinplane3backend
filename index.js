@@ -882,6 +882,34 @@ app.get('/reservationslist', (req, res) => {
   });
 });
 
+// =============================
+// 🔹 GET /getProfile
+// =============================
+app.get("/getProfile", async (req, res) => {
+  try {
+    const { user_id, email } = req.query;
+
+    if (!user_id || !email) {
+      return res.status(400).json({ success: false, error: "user_id et email obligatoires" });
+    }
+
+    const [rows] = await pool.query(
+      `SELECT id, nom, prenom, telephone, email, ville, adresse, pays, date_naissance, expiration_passeport, passeport
+       FROM utilisateurs 
+       WHERE id=? AND email=?`,
+      [user_id, email]
+    );
+
+    if (rows.length === 0) {
+      return res.json({ success: false, message: "Utilisateur introuvable" });
+    }
+
+    return res.json({ success: true, user: rows[0] });
+  } catch (err) {
+    console.error("Erreur backend:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
 
 // Réservation
 // 🔹 Endpoint update/insert profil

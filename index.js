@@ -887,6 +887,7 @@ app.get('/reservationslist', (req, res) => {
 // =============================
 app.post('/getProfile', (req, res) => {
   const { email, user_id } = req.body;
+
   if (!email || !user_id) {
     return res.status(400).json({ success: false, message: "Email et ID requis" });
   }
@@ -899,10 +900,31 @@ app.post('/getProfile', (req, res) => {
         console.error("Erreur MySQL:", err);
         return res.status(500).json({ success: false, message: "Erreur serveur" });
       }
+
       if (results.length === 0) {
         return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
       }
-      res.json({ success: true, user: results[0] });
+
+      const user = results[0];
+
+      // 🔹 Construire un message texte avec toutes les infos
+      const userInfo = `
+ID: ${user.id}
+Nom: ${user.nom || ""}
+Ville: ${user.ville || ""}
+Adresse: ${user.adresse || ""}
+Email: ${user.email || ""}
+Passeport: ${user.passeport || ""}
+Date de naissance: ${user.date_naissance || ""}
+Expiration passeport: ${user.expiration_passeport || ""}
+Pays: ${user.pays || ""}
+      `;
+
+      res.json({
+        success: true,
+        user,
+        message: userInfo.trim()   // 🔹 renvoie aussi un texte lisible
+      });
     }
   );
 });

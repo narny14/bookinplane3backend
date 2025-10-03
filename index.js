@@ -884,6 +884,65 @@ app.get('/reservationslist', (req, res) => {
 
 
 // Réservation
+// 🔹 Endpoint update/insert profil
+app.post("/updateProfile", async (req, res) => {
+  try {
+    const {
+      user_id,
+      email,
+      nom,
+      ville,
+      adresse,
+      passeport,
+      date_naissance,
+      expiration_passeport,
+      pays,
+    } = req.body;
+
+    if (!user_id || !email) {
+      return res.status(400).json({ success: false, error: "user_id et email obligatoires" });
+    }
+
+    // Vérifier si l'utilisateur existe
+    const [rows] = await pool.query(
+      "SELECT id FROM utilisateurs WHERE id = ? AND email = ?",
+      [user_id, email]
+    );
+
+    if (rows.length > 0) {
+      // 🔹 UPDATE
+      await pool.query(
+        `UPDATE utilisateurs 
+         SET nom=?, ville=?, adresse=?, passeport=?, date_naissance=?, expiration_passeport=?, pays=?, updated_at=NOW() 
+         WHERE id=? AND email=?`,
+        [nom, ville, adresse, passeport, date_naissance, expiration_passeport, pays, user_id, email]
+      );
+      return res.json({ success: true, message: "Profil mis à jour ✅" });
+    } else {
+      // 🔹 INSERT avec gestion doublon email
+      await pool.query(
+        `INSERT INTO utilisateurs 
+          (id, nom, email, ville, adresse, passeport, date_naissance, expiration_passeport, pays, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, NOW(), NOW())
+         ON DUPLICATE KEY UPDATE 
+          nom=VALUES(nom),
+          ville=VALUES(ville),
+          adresse=VALUES(adresse),
+          passeport=VALUES(passeport),
+          date_naissance=VALUES(date_naissance),
+          expiration_passeport=VALUES(expiration_passeport),
+          pays=VALUES(pays),
+          updated_at=NOW()`,
+        [user_id, nom, email, ville, adresse, passeport, date_naissance, expiration_passeport, pays]
+      );
+      return res.json({ success: true, message: "Profil inséré ✅" });
+    }
+  } catch (err) {
+    console.error("Erreur backend:", err);
+    return res.status(500).json({ success: false, error: err.message });
+  }
+});
+
 // Réservation multiple (oneway, roundtrip, multicity)
 app.post('/add', async (req, res) => {
   try {

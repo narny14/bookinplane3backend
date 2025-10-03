@@ -1,1 +1,1 @@
-SELECT * from classes_voyage;
+DESCRIBE utilisateurs;

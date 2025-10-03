@@ -885,6 +885,51 @@ app.get('/reservationslist', (req, res) => {
 // =============================
 // 🔹 GET /getProfile
 // =============================
+app.post('/getProfile', (req, res) => {
+  const { email, user_id } = req.body;
+  if (!email || !user_id) {
+    return res.status(400).json({ success: false, message: "Email et ID requis" });
+  }
+
+  db.query(
+    "SELECT * FROM utilisateurs WHERE email = ? AND id = ?",
+    [email, user_id],
+    (err, results) => {
+      if (err) {
+        console.error("Erreur MySQL:", err);
+        return res.status(500).json({ success: false, message: "Erreur serveur" });
+      }
+      if (results.length === 0) {
+        return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
+      }
+      res.json({ success: true, user: results[0] });
+    }
+  );
+});
+
+// Mettre à jour le profil
+app.post('/updateProfile', (req, res) => {
+  const { user_id, email, nom, ville, adresse, passeport, date_naissance, expiration_passeport, pays } = req.body;
+
+  if (!user_id || !email) {
+    return res.status(400).json({ success: false, message: "Email et ID requis" });
+  }
+
+  db.query(
+    `UPDATE utilisateurs 
+     SET nom=?, ville=?, adresse=?, passeport=?, date_naissance=?, expiration_passeport=?, pays=? 
+     WHERE id=? AND email=?`,
+    [nom, ville, adresse, passeport, date_naissance, expiration_passeport, pays, user_id, email],
+    (err, result) => {
+      if (err) {
+        console.error("Erreur MySQL:", err);
+        return res.status(500).json({ success: false, message: "Erreur serveur" });
+      }
+      res.json({ success: true, message: "Profil mis à jour" });
+    }
+  );
+});
+/*
 app.get("/getProfile", async (req, res) => {
   try {
     const { user_id, email } = req.query;
@@ -909,10 +954,11 @@ app.get("/getProfile", async (req, res) => {
     console.error("Erreur backend:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
-});
+});*/
 
 // Réservation
 // 🔹 Endpoint update/insert profil
+/*
 app.post("/updateProfile", async (req, res) => {
   try {
     const {
@@ -969,7 +1015,7 @@ app.post("/updateProfile", async (req, res) => {
     console.error("Erreur backend:", err);
     return res.status(500).json({ success: false, error: err.message });
   }
-});
+});*/
 
 // Réservation multiple (oneway, roundtrip, multicity)
 app.post('/add', async (req, res) => {

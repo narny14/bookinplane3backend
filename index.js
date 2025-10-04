@@ -36,6 +36,9 @@ console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, proce
 
 // ====================== ROUTES =======================
 
+// 🔹 Permet de servir tout le dossier "privacy"
+app.use("/privacy", express.static(path.join(__dirname, "privacy")));
+
 // Liste des aéroports
 app.get('/api/aeroports', (req, res, next) => {
   const sql = `

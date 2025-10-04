@@ -4,8 +4,6 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const compression = require('compression');
 
-const path = require("path");   // 🔹 AJOUT OBLIGATOIRE
-
 
 dotenv.config();
 
@@ -37,9 +35,6 @@ db.connect(err => {
 console.log("✅ Connecté DB:", process.env.DB_HOST, process.env.DB_NAME, process.env.DB_USER);
 
 // ====================== ROUTES =======================
-
-// 🔹 Permet de servir tout le dossier "privacy"
-app.use("/privacy", express.static(path.join(__dirname, "privacy")));
 
 // Liste des aéroports
 app.get('/api/aeroports', (req, res, next) => {
@@ -2228,6 +2223,9 @@ app.post('/api/search-vols-dispo', (req, res) => {
       });
   });
 });*/
+
+// 🔹 Permet de servir tout le dossier "privacy"
+app.use("/privacy", express.static(path.join(__dirname, "privacy")));
 
 app.listen(PORT, () => {
   console.log(`🚀 Serveur backend en cours sur http://localhost:${PORT}`);

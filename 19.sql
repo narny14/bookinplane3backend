@@ -1,2 +1,3 @@
-ALTER TABLE utilisateurs
-ADD COLUMN passeport VARCHAR(50) NULL;
+UPDATE utilisateurs 
+SET email = 'Spencermimo@gmail.com' 
+WHERE email = 'test.nouveau@example.com';

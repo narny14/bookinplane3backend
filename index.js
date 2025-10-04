@@ -889,44 +889,62 @@ app.post('/getProfile', (req, res) => {
   const { email, user_id } = req.body;
 
   if (!email || !user_id) {
-    return res.status(400).json({ success: false, message: "Email et ID requis" });
+    return res.status(400).json({
+      success: false,
+      message: "Email et ID requis",
+      user: null
+    });
   }
 
-  db.query(
-    "SELECT * FROM utilisateurs WHERE email = ? AND id = ?",
-    [email, user_id],
-    (err, results) => {
-      if (err) {
-        console.error("Erreur MySQL:", err);
-        return res.status(500).json({ success: false, message: "Erreur serveur" });
-      }
+  const sql = `
+    SELECT id, nom, ville, adresse, email, passeport, 
+           DATE_FORMAT(date_naissance, '%Y-%m-%d') AS date_naissance,
+           DATE_FORMAT(expiration_passeport, '%Y-%m-%d') AS expiration_passeport,
+           pays
+    FROM utilisateurs 
+    WHERE email = ? AND id = ?
+    LIMIT 1
+  `;
 
-      if (results.length === 0) {
-        return res.status(404).json({ success: false, message: "Utilisateur non trouvé" });
-      }
-
-      const user = results[0];
-
-      // 🔹 Construire un message texte avec toutes les infos
-      const userInfo = `
-ID: ${user.id}
-Nom: ${user.nom || ""}
-Ville: ${user.ville || ""}
-Adresse: ${user.adresse || ""}
-Email: ${user.email || ""}
-Passeport: ${user.passeport || ""}
-Date de naissance: ${user.date_naissance || ""}
-Expiration passeport: ${user.expiration_passeport || ""}
-Pays: ${user.pays || ""}
-      `;
-
-      res.json({
-        success: true,
-        user,
-        message: userInfo.trim()   // 🔹 renvoie aussi un texte lisible
+  db.query(sql, [email, user_id], (err, results) => {
+    if (err) {
+      console.error("❌ Erreur MySQL:", err);
+      return res.status(500).json({
+        success: false,
+        message: "Erreur serveur",
+        user: null
       });
     }
-  );
+
+    if (results.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Utilisateur non trouvé",
+        user: null
+      });
+    }
+
+    const user = results[0];
+
+    // 🔹 Construire un message lisible
+    const userInfo = `
+ID: ${user.id}
+Nom: ${user.nom || "N/A"}
+Ville: ${user.ville || "N/A"}
+Adresse: ${user.adresse || "N/A"}
+Email: ${user.email || "N/A"}
+Passeport: ${user.passeport || "N/A"}
+Date de naissance: ${user.date_naissance || "N/A"}
+Expiration passeport: ${user.expiration_passeport || "N/A"}
+Pays: ${user.pays || "N/A"}
+    `.trim();
+
+    return res.json({
+      success: true,
+      message: userInfo,
+      user
+    });
+  });
 });
 
 // Mettre à jour le profil

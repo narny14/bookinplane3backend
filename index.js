@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const compression = require('compression');
 
+const path = require("path");   // 🔹 AJOUT OBLIGATOIRE
+
 
 dotenv.config();
 
